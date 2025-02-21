@@ -8,7 +8,9 @@ fn main() {
         match stream {
             Ok(stream) => {
                 std::thread::spawn(move || {
-                    handle(stream);
+                    if let Err(error) = handle(stream) {
+                        eprintln!("Error while handling socket: {error}");
+                    }
                 });
             }
             Err(error) => {
@@ -18,14 +20,14 @@ fn main() {
     }
 }
 
-fn handle(stream: TcpStream) {
-    let mut websocket = accept(stream).unwrap();
+fn handle(stream: TcpStream) -> anyhow::Result<()> {
+    let mut websocket = accept(stream)?;
     loop {
-        let msg = websocket.read().unwrap();
+        let msg = websocket.read()?;
 
         // We do not want to send back ping/pong messages.
         if msg.is_binary() || msg.is_text() {
-            websocket.send(msg).unwrap();
+            websocket.send(msg)?;
         }
     }
 }
