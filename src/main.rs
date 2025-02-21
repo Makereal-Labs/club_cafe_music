@@ -4,20 +4,22 @@ use tungstenite::accept;
 /// A WebSocket echo server
 fn main() {
     let server = TcpListener::bind("0.0.0.0:9001").unwrap();
-    for stream in server.incoming() {
-        match stream {
-            Ok(stream) => {
-                std::thread::spawn(move || {
-                    if let Err(error) = handle(stream) {
-                        eprintln!("Error while handling socket: {error}");
-                    }
-                });
-            }
-            Err(error) => {
-                eprintln!("Error listening socket: {error}");
+    std::thread::scope(|s| {
+        for stream in server.incoming() {
+            match stream {
+                Ok(stream) => {
+                    s.spawn(move || {
+                        if let Err(error) = handle(stream) {
+                            eprintln!("Error while handling socket: {error}");
+                        }
+                    });
+                }
+                Err(error) => {
+                    eprintln!("Error listening socket: {error}");
+                }
             }
         }
-    }
+    });
 }
 
 fn handle(stream: TcpStream) -> anyhow::Result<()> {
