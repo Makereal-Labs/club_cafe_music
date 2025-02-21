@@ -1,8 +1,15 @@
+use rodio::{Decoder, Sink};
 use std::net::{TcpListener, TcpStream};
 use tungstenite::accept;
 
 /// A WebSocket echo server
 fn main() {
+    let (_stream, stream_handle) = rodio::OutputStream::try_default().unwrap();
+    let sink = Sink::try_new(&stream_handle).unwrap();
+    let file = std::io::BufReader::new(std::fs::File::open("/home/makereal/forever.mp3").unwrap());
+    let source = Decoder::new(file).unwrap();
+    sink.append(source);
+
     let server = TcpListener::bind("0.0.0.0:9001").unwrap();
     std::thread::scope(|s| {
         for stream in server.incoming() {
