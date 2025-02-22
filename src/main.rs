@@ -7,7 +7,6 @@ use std::thread::sleep;
 use std::time::Duration;
 use tungstenite::accept;
 
-/// A WebSocket echo server
 fn main() {
     let (stream, stream_handle) = rodio::OutputStream::try_default().unwrap();
     forget(stream);
