@@ -1,8 +1,22 @@
-//import { useState } from 'react'
-import { AppBar, Box, Container, Toolbar, Typography } from '@mui/material'
+import { useCallback, useState } from 'react'
+import { AppBar, Box, Button, Container, List, ListItem, ListItemText, Toolbar, Typography } from '@mui/material'
+import { useSession } from './session.ts'
 
 function App() {
-  //const [count, setCount] = useState(0)
+  const [recv, setRecv] = useState<string[]>([])
+  const session = useSession(
+    // on open
+    useCallback(() => { }, []),
+    // on error
+    useCallback(() => { }, []),
+    // on message
+    useCallback((event) => {
+      console.log(event.data)
+      setRecv(recv.concat([event.data]))
+    }, [recv]),
+    // on close
+    useCallback(() => { }, []),
+  )
 
   return (
     <Box>
@@ -28,6 +42,22 @@ function App() {
           soluta accusamus porro reprehenderit eos inventore facere, fugit, molestiae
           ab officiis illo voluptates recusandae.
         </Typography>
+        <Button variant="contained" onClick={() => { session.send("OAO") }}>Send message</Button>
+        <List>
+          <ListItem>
+            <ListItemText>OAO</ListItemText>
+          </ListItem>
+          {recv.map(item =>
+            <ListItem>
+              <ListItemText>
+                {item}
+              </ListItemText>
+            </ListItem>
+          )}
+          <ListItem>
+            <ListItemText>OuO</ListItemText>
+          </ListItem>
+        </List>
       </Container>
     </Box>
   )
