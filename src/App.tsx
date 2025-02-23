@@ -1,34 +1,35 @@
-import { useState } from 'react'
-import reactLogo from './assets/react.svg'
-import viteLogo from '/vite.svg'
-import './App.css'
+//import { useState } from 'react'
+import { AppBar, Box, Container, Toolbar, Typography } from '@mui/material'
 
 function App() {
-  const [count, setCount] = useState(0)
+  //const [count, setCount] = useState(0)
 
   return (
-    <>
-      <div>
-        <a href="https://vite.dev" target="_blank">
-          <img src={viteLogo} className="logo" alt="Vite logo" />
-        </a>
-        <a href="https://react.dev" target="_blank">
-          <img src={reactLogo} className="logo react" alt="React logo" />
-        </a>
-      </div>
-      <h1>Vite + React</h1>
-      <div className="card">
-        <button onClick={() => setCount((count) => count + 1)}>
-          count is {count}
-        </button>
-        <p>
-          Edit <code>src/App.tsx</code> and save to test HMR
-        </p>
-      </div>
-      <p className="read-the-docs">
-        Click on the Vite and React logos to learn more
-      </p>
-    </>
+    <Box>
+      <AppBar>
+        <Toolbar>
+          <Typography variant="h6">
+            Makereal Labs café music player
+          </Typography>
+        </Toolbar>
+      </AppBar>
+      <Container>
+        <Toolbar />
+        <Typography>
+          Lorem ipsum dolor sit amet consectetur adipisicing elit. Similique unde
+          fugit veniam eius, perspiciatis sunt? Corporis qui ducimus quibusdam,
+          aliquam dolore excepturi quae. Distinctio enim at eligendi perferendis in
+          cum quibusdam sed quae, accusantium et aperiam? Quod itaque exercitationem,
+          at ab sequi qui modi delectus quia corrupti alias distinctio nostrum.
+          Minima ex dolor modi inventore sapiente necessitatibus aliquam fuga et. Sed
+          numquam quibusdam at officia sapiente porro maxime corrupti perspiciatis
+          asperiores, exercitationem eius nostrum consequuntur iure aliquam itaque,
+          assumenda et! Quibusdam temporibus beatae doloremque voluptatum doloribus
+          soluta accusamus porro reprehenderit eos inventore facere, fugit, molestiae
+          ab officiis illo voluptates recusandae.
+        </Typography>
+      </Container>
+    </Box>
   )
 }
 
