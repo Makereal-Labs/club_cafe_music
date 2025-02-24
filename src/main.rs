@@ -1,5 +1,7 @@
+use reqwest::blocking::Client;
 use rodio::{Decoder, Sink, source::Source};
 use std::collections::VecDeque;
+use std::io;
 use std::mem::forget;
 use std::net::{TcpListener, TcpStream};
 use std::process::{Command, Stdio};
@@ -7,20 +9,24 @@ use std::thread::sleep;
 use std::time::Duration;
 use tungstenite::accept;
 
+mod http_stream;
+use http_stream::HttpStream;
+
 fn main() {
     let (stream, stream_handle) = rodio::OutputStream::try_default().unwrap();
     forget(stream);
     let sink = Sink::try_new(&stream_handle).unwrap();
     let mut queue: VecDeque<Box<dyn Source<Item = f32> + Send>> = VecDeque::new();
 
+    let client = Client::new();
+
     let url = "https://www.youtube.com/watch?v=ertwyT4gnc0";
-
     let list = get_ytdlp(url).unwrap();
+    let link = list[0].clone();
 
-    println!("{}", list[0]);
-
-    let file = std::io::BufReader::new(std::fs::File::open("/home/makereal/forever.mp3").unwrap());
-    let source = Decoder::new(file).unwrap();
+    let http_stream = HttpStream::new(client.clone(), link).unwrap();
+    let buf = io::BufReader::new(http_stream);
+    let source = Decoder::new(buf).unwrap();
     queue.push_back(Box::new(source.convert_samples()));
 
     let server = TcpListener::bind("0.0.0.0:9001").unwrap();
