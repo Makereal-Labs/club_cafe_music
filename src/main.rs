@@ -1,6 +1,4 @@
-use rodio::{Decoder, Sink, source::Source};
 use std::collections::VecDeque;
-use std::mem::forget;
 use std::net::{TcpListener, TcpStream};
 use std::process::{Command, Stdio};
 use std::thread::sleep;
@@ -8,28 +6,25 @@ use std::time::Duration;
 use tungstenite::accept;
 
 fn main() {
-    let (stream, stream_handle) = rodio::OutputStream::try_default().unwrap();
-    forget(stream);
-    let sink = Sink::try_new(&stream_handle).unwrap();
-    let mut queue: VecDeque<Box<dyn Source<Item = f32> + Send>> = VecDeque::new();
+    let mut queue: VecDeque<String> = VecDeque::new();
 
     let url = "https://www.youtube.com/watch?v=ertwyT4gnc0";
 
     let list = get_ytdlp(url).unwrap();
 
-    println!("{}", list[0]);
-
-    let file = std::io::BufReader::new(std::fs::File::open("/home/makereal/forever.mp3").unwrap());
-    let source = Decoder::new(file).unwrap();
-    queue.push_back(Box::new(source.convert_samples()));
+    queue.push_back("/home/makereal/forever.mp3".to_string());
+    queue.push_back(list.into_iter().next().unwrap());
 
     let server = TcpListener::bind("0.0.0.0:9001").unwrap();
     std::thread::scope(|s| {
         s.spawn(|| {
-            sink.sleep_until_end();
-            sleep(Duration::from_millis(200));
-            if let Some(source) = queue.pop_front() {
-                sink.append(source);
+            loop {
+                if let Some(url) = queue.pop_front() {
+                    if let Err(err) = vlc(&url) {
+                        eprintln!("{}", err);
+                    }
+                }
+                sleep(Duration::from_millis(200));
             }
         });
         for stream in server.incoming() {
@@ -77,6 +72,25 @@ fn get_ytdlp(url: &str) -> anyhow::Result<Vec<String>> {
         .collect();
 
     Ok(list)
+}
+
+fn vlc(url: &str) -> anyhow::Result<()> {
+    let output = Command::new("cvlc")
+        .arg("-A")
+        .arg("alsa,none")
+        .arg(url)
+        .arg("vlc://quit")
+        .stdin(Stdio::null())
+        .stdout(Stdio::null())
+        .stderr(Stdio::piped())
+        .spawn()?
+        .wait_with_output()?;
+
+    if !output.status.success() {
+        let result = std::str::from_utf8(&output.stderr)?;
+        return Err(anyhow::anyhow!("Call to yt-dlp failed: {}\n{}", output.status, result));
+    }
+    Ok(())
 }
 
 fn handle(stream: TcpStream) -> anyhow::Result<()> {
