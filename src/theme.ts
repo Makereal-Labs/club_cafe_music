@@ -1,19 +1,23 @@
 import { createTheme } from '@mui/material/styles';
-import { red } from '@mui/material/colors';
+import { grey, red } from '@mui/material/colors';
 
 const theme = createTheme({
   cssVariables: true,
   palette: {
     mode: 'dark',
     primary: {
-      main: '#556cd6',
+      main: '#4347b2',
     },
     secondary: {
-      main: '#19857b',
+      main: '#ECCD01',
     },
     error: {
       main: red.A400,
     },
+    background: {
+      default: grey[900],
+      paper: grey[900],
+    }
   },
 });
 
