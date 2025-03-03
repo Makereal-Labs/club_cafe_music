@@ -1,3 +1,4 @@
+use serde::Deserialize;
 use std::collections::VecDeque;
 use std::net::{TcpListener, TcpStream};
 use std::process::{Command, Stdio};
@@ -12,8 +13,18 @@ fn main() {
 
     let list = get_ytdlp(url).unwrap();
 
-    queue.push_back("/home/makereal/forever.mp3".to_string());
-    queue.push_back(list.into_iter().next().unwrap());
+    //queue.push_back("/home/makereal/forever.mp3".to_string());
+    let info = list.into_iter().next().unwrap();
+
+    let format = info
+        .formats
+        .iter()
+        .filter(|m| m.acodec.clone().map(|s| s != "none").unwrap_or(false))
+        .reduce(|acc, e| std::cmp::max_by_key(acc, e, |v| v.quality.unwrap_or(-10.0) as i32))
+        .unwrap();
+    println!("{format:?}");
+    let url = format.url.to_owned();
+    queue.push_back(url);
 
     let server = TcpListener::bind("0.0.0.0:9001").unwrap();
     std::thread::scope(|s| {
@@ -44,13 +55,42 @@ fn main() {
     });
 }
 
-fn get_ytdlp(url: &str) -> anyhow::Result<Vec<String>> {
+#[allow(unused)]
+#[derive(Debug, Clone, Deserialize)]
+struct YoutubeInfo {
+    id: String,
+    title: String,
+    description: Option<String>,
+    channel: String,
+    channel_url: String,
+    duration: u32,
+    playlist: Option<String>,
+    thumbnail: String,
+    formats: Vec<MediaFormat>,
+}
+
+#[allow(unused)]
+#[derive(Debug, Clone, Deserialize)]
+struct MediaFormat {
+    format_note: Option<String>,
+    quality: Option<f32>,
+    vcodec: Option<String>,
+    acodec: Option<String>,
+    video_ext: String,
+    audio_ext: String,
+    ext: String,
+    url: String,
+}
+
+fn get_ytdlp(url: &str) -> anyhow::Result<Vec<YoutubeInfo>> {
     if matches!(url.chars().next(), None | Some('-')) {
         return Err(anyhow::anyhow!("Invalid URL :{}", url));
     }
 
     let output = Command::new("yt-dlp")
-        .arg("--get-url")
+        .arg("-j")
+        .arg("--skip-download")
+        .arg("--flat-playlist")
         .arg("--no-warning")
         .arg(url)
         .stdin(Stdio::null())
@@ -67,9 +107,8 @@ fn get_ytdlp(url: &str) -> anyhow::Result<Vec<String>> {
 
     let list = result
         .lines()
-        .filter(|url| url.contains("mime=audio"))
-        .map(String::from)
-        .collect();
+        .map(serde_json::from_str::<YoutubeInfo>)
+        .collect::<serde_json::Result<_>>()?;
 
     Ok(list)
 }
@@ -78,6 +117,7 @@ fn vlc(url: &str) -> anyhow::Result<()> {
     let output = Command::new("cvlc")
         .arg("-A")
         .arg("alsa,none")
+        .arg("--no-video")
         .arg(url)
         .arg("vlc://quit")
         .stdin(Stdio::null())
@@ -88,7 +128,11 @@ fn vlc(url: &str) -> anyhow::Result<()> {
 
     if !output.status.success() {
         let result = std::str::from_utf8(&output.stderr)?;
-        return Err(anyhow::anyhow!("Call to yt-dlp failed: {}\n{}", output.status, result));
+        return Err(anyhow::anyhow!(
+            "Call to vlc failed: {}\n{}",
+            output.status,
+            result
+        ));
     }
     Ok(())
 }
