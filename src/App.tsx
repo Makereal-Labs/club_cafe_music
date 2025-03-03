@@ -1,10 +1,20 @@
-import { useCallback, useState } from 'react'
-import { AppBar, Box, Button, Container, List, ListItem, ListItemText, Toolbar, Typography } from '@mui/material'
-import { useSession } from './session.ts'
-import Player from './Player.tsx'
+import { useCallback, useState } from 'react';
+import {
+  AppBar,
+  Box,
+  Button,
+  Container,
+  List,
+  ListItem,
+  ListItemText,
+  Toolbar,
+  Typography,
+} from '@mui/material';
+import { useSession } from './session.ts';
+import Player from './Player.tsx';
 
 function App() {
-  const [recv, setRecv] = useState<string[]>([])
+  const [recv, setRecv] = useState<string[]>([]);
   const session = useSession(
     // on open
     useCallback(() => { }, []),
@@ -12,12 +22,12 @@ function App() {
     useCallback(() => { }, []),
     // on message
     useCallback((event) => {
-      console.log(event.data)
-      setRecv(recv.concat([event.data]))
+      console.log(event.data);
+      setRecv(recv.concat([event.data]));
     }, [recv]),
     // on close
     useCallback(() => { }, []),
-  )
+  );
 
   return (
     <Box>
@@ -31,7 +41,12 @@ function App() {
       <Container>
         <Toolbar />
         <Player />
-        <Button variant="contained" onClick={() => { session.send("OAO") }}>Send message</Button>
+        <Button
+          variant="contained"
+          onClick={() => { session.send("OAO"); }}
+        >
+          Send message
+        </Button>
         <List>
           <ListItem>
             <ListItemText>OAO</ListItemText>
@@ -41,7 +56,7 @@ function App() {
               <ListItemText>
                 {item}
               </ListItemText>
-            </ListItem>
+            </ListItem>,
           )}
           <ListItem>
             <ListItemText>OuO</ListItemText>
@@ -49,7 +64,7 @@ function App() {
         </List>
       </Container>
     </Box>
-  )
+  );
 }
 
-export default App
+export default App;

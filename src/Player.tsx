@@ -6,15 +6,22 @@ import {
   VolumeDownRounded,
   VolumeUpRounded,
 } from "@mui/icons-material";
-import { Box, IconButton, Slider, Stack, Typography, useTheme } from "@mui/material";
+import {
+  Box,
+  IconButton,
+  Slider,
+  Stack,
+  Typography,
+  useTheme,
+} from "@mui/material";
 import { useState } from "react";
 
 function Player() {
   const theme = useTheme();
-  const [playing, setPlaying] = useState(false)
+  const [playing, setPlaying] = useState(false);
 
-  const current_time = "1:23"
-  const remaining_time = "4:56"
+  const current_time = "1:23";
+  const remaining_time = "4:56";
 
   return (
     <Box sx={{
@@ -33,7 +40,7 @@ function Player() {
         <IconButton>
           <FastRewindRounded fontSize="large" />
         </IconButton>
-        <IconButton onClick={() => { setPlaying(!playing) }}>
+        <IconButton onClick={() => { setPlaying(!playing); }}>
           {
             playing ? (
               <PlayArrowRounded fontSize="large" />
@@ -52,7 +59,7 @@ function Player() {
         <VolumeUpRounded color="disabled" />
       </Stack>
     </Box>
-  )
+  );
 }
 
-export default Player
+export default Player;

@@ -11,9 +11,10 @@ export function useSession(
   onOpen: OpenHandler,
   onError: ErrorHandler,
   onMessage: MessageHandler,
-  onClose: CloseHandler
+  onClose: CloseHandler,
 ): WebSocket {
-  const [session, setSession] = useState<WebSocket>(null as unknown as WebSocket);
+  const [session, setSession] =
+    useState<WebSocket>(null as unknown as WebSocket);
 
   if (session === null) {
     setSession(new WebSocket(SERVER_URL));
