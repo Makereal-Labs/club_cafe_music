@@ -16,8 +16,9 @@ import {
 } from "@mui/material";
 import { useState } from "react";
 
-function format_time(time: number): String {
-  return `${Math.floor(time / 60)}:` + `${Math.floor(time) % 60}`.padStart(2, "0");
+function format_time(time: number): string {
+  return `${Math.floor(time / 60)}:`
+    + `${Math.floor(time) % 60}`.padStart(2, "0");
 }
 
 function Player() {
