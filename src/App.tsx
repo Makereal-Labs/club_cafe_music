@@ -7,6 +7,7 @@ import {
   List,
   ListItem,
   ListItemText,
+  TextField,
   Toolbar,
   Typography,
 } from '@mui/material';
@@ -15,6 +16,7 @@ import Player from './Player.tsx';
 
 function App() {
   const [recv, setRecv] = useState<string[]>([]);
+  const [yt_link, setYtLink] = useState("");
   const session = useSession(
     // on open
     useCallback(() => { }, []),
@@ -29,6 +31,10 @@ function App() {
     useCallback(() => { }, []),
   );
 
+  function on_yt_submit() {
+    setYtLink("");
+  }
+
   return (
     <Box>
       <AppBar>
@@ -41,6 +47,20 @@ function App() {
       <Container>
         <Toolbar />
         <Player />
+        <form onSubmit={event => {event.preventDefault(); on_yt_submit();} }>
+          <TextField
+            fullWidth
+            label="Youtube Link"
+            type="search"
+            variant="filled"
+            autoComplete="off"
+            margin="normal"
+            value={yt_link}
+            onChange={(event: React.ChangeEvent<HTMLInputElement>) => {
+              setYtLink(event.target.value);
+            }}
+          />
+        </form>
         <Button
           variant="contained"
           onClick={() => { session.send("OAO"); }}
