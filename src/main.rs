@@ -4,7 +4,7 @@ use std::net::{TcpListener, TcpStream};
 use std::process::{Command, Stdio};
 use std::thread::sleep;
 use std::time::Duration;
-use tungstenite::accept;
+use tungstenite::{accept, Message};
 
 fn main() {
     let mut queue: VecDeque<String> = VecDeque::new();
@@ -140,11 +140,27 @@ fn vlc(url: &str) -> anyhow::Result<()> {
 fn handle(stream: TcpStream) -> anyhow::Result<()> {
     let mut websocket = accept(stream)?;
     loop {
-        let msg = websocket.read()?;
+        let msg = match websocket.read() {
+            Ok(msg) => msg,
+            Err(tungstenite::Error::ConnectionClosed) => {
+                return Ok(());
+            }
+            Err(err) => {
+                return Err(err.into());
+            }
+        };
 
-        // We do not want to send back ping/pong messages.
-        if msg.is_binary() || msg.is_text() {
-            websocket.send(msg)?;
+        use serde_json::Value::*;
+        if let Message::Text(msg) = msg {
+            if let Ok(Object(obj)) = serde_json::from_str(&msg) {
+                if let Some(msg) = obj.get("msg") {
+                    if msg == "yt" {
+                        if let Some(String(link)) = obj.get("link") {
+                            websocket.send(Message::text(link))?;
+                        }
+                    }
+                }
+            }
         }
     }
 }
