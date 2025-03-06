@@ -2,36 +2,37 @@ use serde::Deserialize;
 use std::collections::VecDeque;
 use std::net::{TcpListener, TcpStream};
 use std::process::{Command, Stdio};
+use std::sync::Mutex;
 use std::thread::sleep;
 use std::time::Duration;
-use tungstenite::{accept, Message};
+use tungstenite::{Message, accept};
 
 fn main() {
-    let mut queue: VecDeque<String> = VecDeque::new();
-
-    let url = "https://www.youtube.com/watch?v=ertwyT4gnc0";
-
-    let list = get_ytdlp(url).unwrap();
-
-    //queue.push_back("/home/makereal/forever.mp3".to_string());
-    let info = list.into_iter().next().unwrap();
-
-    let format = info
-        .formats
-        .iter()
-        .filter(|m| m.acodec.clone().map(|s| s != "none").unwrap_or(false))
-        .reduce(|acc, e| std::cmp::max_by_key(acc, e, |v| v.quality.unwrap_or(-10.0) as i32))
-        .unwrap();
-    println!("{format:?}");
-    let url = format.url.to_owned();
-    queue.push_back(url);
+    let queue: Mutex<VecDeque<YoutubeInfo>> = Mutex::new(VecDeque::new());
 
     let server = TcpListener::bind("0.0.0.0:9001").unwrap();
     std::thread::scope(|s| {
         s.spawn(|| {
             loop {
-                if let Some(url) = queue.pop_front() {
-                    if let Err(err) = vlc(&url) {
+                let info = queue.lock().unwrap().pop_front();
+                if let Some(info) = info {
+                    let format = info
+                        .formats
+                        .iter()
+                        .filter(|m| m.acodec.clone().map(|s| s != "none").unwrap_or(false))
+                        .reduce(|acc, e| {
+                            std::cmp::max_by_key(acc, e, |v| v.quality.unwrap_or(-10.0) as i32)
+                        });
+
+                    let format = match format {
+                        Some(format) => format,
+                        None => {
+                            eprintln!("No usable format when playing id: {}", info.id);
+                            continue;
+                        }
+                    };
+
+                    if let Err(err) = vlc(&format.url) {
                         eprintln!("{}", err);
                     }
                 }
@@ -41,8 +42,9 @@ fn main() {
         for stream in server.incoming() {
             match stream {
                 Ok(stream) => {
+                    let ref_queue = &queue;
                     s.spawn(move || {
-                        if let Err(error) = handle(stream) {
+                        if let Err(error) = handle(stream, ref_queue) {
                             eprintln!("Error while handling socket: {error}");
                         }
                     });
@@ -137,7 +139,7 @@ fn vlc(url: &str) -> anyhow::Result<()> {
     Ok(())
 }
 
-fn handle(stream: TcpStream) -> anyhow::Result<()> {
+fn handle(stream: TcpStream, queue: &Mutex<VecDeque<YoutubeInfo>>) -> anyhow::Result<()> {
     let mut websocket = accept(stream)?;
     loop {
         let msg = match websocket.read() {
@@ -151,15 +153,34 @@ fn handle(stream: TcpStream) -> anyhow::Result<()> {
         };
 
         use serde_json::Value::*;
-        if let Message::Text(msg) = msg {
-            if let Ok(Object(obj)) = serde_json::from_str(&msg) {
-                if let Some(msg) = obj.get("msg") {
-                    if msg == "yt" {
-                        if let Some(String(link)) = obj.get("link") {
-                            websocket.send(Message::text(link))?;
-                        }
-                    }
-                }
+        let msg = match msg {
+            Message::Text(msg) => msg,
+            _ => {
+                continue;
+            }
+        };
+
+        let obj = match serde_json::from_str(&msg) {
+            Ok(Object(obj)) => obj,
+            _ => {
+                continue;
+            }
+        };
+
+        let msg = match obj.get("msg") {
+            Some(String(msg)) => msg,
+            _ => {
+                continue;
+            }
+        };
+
+        if msg == "yt" {
+            if let Some(String(link)) = obj.get("link") {
+                websocket.send(Message::text(link))?;
+
+                let list = get_ytdlp(link).unwrap();
+                let info = list.into_iter().next().unwrap();
+                queue.lock().unwrap().push_back(info);
             }
         }
     }
