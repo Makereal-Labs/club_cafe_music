@@ -33,6 +33,11 @@ function App() {
 
   function on_yt_submit() {
     setYtLink("");
+    const msg = {
+      msg: "yt",
+      link: yt_link,
+    };
+    session.send(JSON.stringify(msg));
   }
 
   return (
