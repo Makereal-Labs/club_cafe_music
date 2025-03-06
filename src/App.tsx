@@ -24,8 +24,15 @@ function App() {
     useCallback(() => { }, []),
     // on message
     useCallback((event) => {
-      console.log(event.data);
-      setRecv(recv.concat([event.data]));
+      try {
+        const body = JSON.parse(event.data);
+        if (body["msg"] == "queue") {
+          const queue = body["queue"] as Array<{title: string}>;
+          setRecv(queue.map(item => item["title"]));
+        }
+      } catch {
+        setRecv(recv.concat([event.data]));
+      }
     }, [recv]),
     // on close
     useCallback(() => { }, []),
