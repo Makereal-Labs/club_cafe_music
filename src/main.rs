@@ -1,4 +1,5 @@
 use serde::Deserialize;
+use serde_json::json;
 use std::collections::VecDeque;
 use std::net::{TcpListener, TcpStream};
 use std::process::{Command, Stdio};
@@ -141,6 +142,16 @@ fn vlc(url: &str) -> anyhow::Result<()> {
 
 fn handle(stream: TcpStream, queue: &Mutex<VecDeque<YoutubeInfo>>) -> anyhow::Result<()> {
     let mut websocket = accept(stream)?;
+
+    websocket.send(Message::Text(
+        serde_json::to_string(&json!({
+            "msg": "queue",
+            "queue": queue.lock().unwrap().iter()
+                .map(|info| json!({"title": info.title})).collect::<Vec<_>>()
+        }))?
+        .into(),
+    ))?;
+
     loop {
         let msg = match websocket.read() {
             Ok(msg) => msg,
