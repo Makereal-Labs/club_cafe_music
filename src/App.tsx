@@ -4,9 +4,11 @@ import {
   Box,
   Button,
   Container,
+  Divider,
   List,
   ListItem,
   ListItemText,
+  ListSubheader,
   TextField,
   Toolbar,
   Typography,
@@ -80,19 +82,17 @@ function App() {
           Send message
         </Button>
         <List>
-          <ListItem>
-            <ListItemText>OAO</ListItemText>
-          </ListItem>
+          <ListSubheader>Queue</ListSubheader>
           {recv.map(item =>
-            <ListItem>
-              <ListItemText>
-                {item}
-              </ListItemText>
-            </ListItem>,
+            <>
+              <ListItem>
+                <ListItemText>
+                  {item}
+                </ListItemText>
+              </ListItem>
+              <Divider />
+            </>,
           )}
-          <ListItem>
-            <ListItemText>OuO</ListItemText>
-          </ListItem>
         </List>
       </Container>
     </Box>
