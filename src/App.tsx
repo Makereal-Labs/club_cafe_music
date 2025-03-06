@@ -2,7 +2,6 @@ import { useCallback, useState } from 'react';
 import {
   AppBar,
   Box,
-  Button,
   Container,
   Divider,
   List,
@@ -75,12 +74,6 @@ function App() {
             }}
           />
         </form>
-        <Button
-          variant="contained"
-          onClick={() => { session.send("OAO"); }}
-        >
-          Send message
-        </Button>
         <List>
           <ListSubheader>Queue</ListSubheader>
           {recv.map(item =>
