@@ -9,13 +9,17 @@ import {
   ListItemText,
   ListSubheader,
   TextField,
+  ThemeProvider,
   Toolbar,
   Typography,
 } from '@mui/material';
 import { useSession } from './session.ts';
 import Player from './Player.tsx';
+import ThemeToggle from './ThemeToggle.tsx';
+import { get_theme, ThemeId } from './theme.ts';
 
 function App() {
+  const [theme, setTheme] = useState(ThemeId.Dark);
   const [recv, setRecv] = useState<string[]>([]);
   const [yt_link, setYtLink] = useState("");
   const session = useSession(
@@ -39,6 +43,14 @@ function App() {
     useCallback(() => { }, []),
   );
 
+  function on_theme_toggle() {
+    if (theme == ThemeId.Light) {
+      setTheme(ThemeId.Dark);
+    } else {
+      setTheme(ThemeId.Light);
+    }
+  }
+
   function on_yt_submit() {
     setYtLink("");
     const msg = {
@@ -49,46 +61,49 @@ function App() {
   }
 
   return (
-    <Box>
-      <AppBar>
-        <Toolbar>
-          <Typography variant="h6">
-            Makereal Labs café music player
-          </Typography>
-        </Toolbar>
-      </AppBar>
-      <Container>
-        <Toolbar />
-        <Player />
-        <form onSubmit={event => {event.preventDefault(); on_yt_submit();} }>
-          <TextField
-            fullWidth
-            label="Youtube Link"
-            type="search"
-            variant="filled"
-            autoComplete="off"
-            margin="normal"
-            value={yt_link}
-            onChange={(event: React.ChangeEvent<HTMLInputElement>) => {
-              setYtLink(event.target.value);
-            }}
-          />
-        </form>
-        <List>
-          <ListSubheader>Queue</ListSubheader>
-          {recv.map(item =>
-            <>
-              <ListItem>
-                <ListItemText>
-                  {item}
-                </ListItemText>
-              </ListItem>
-              <Divider />
-            </>,
-          )}
-        </List>
-      </Container>
-    </Box>
+    <ThemeProvider theme={get_theme(theme)}>
+      <Box>
+        <AppBar>
+          <Toolbar>
+            <Typography variant="h6">
+              Makereal Labs café music player
+            </Typography>
+          </Toolbar>
+        </AppBar>
+        <Container>
+          <Toolbar />
+          <ThemeToggle value={theme} onClick={on_theme_toggle} />
+          <Player />
+          <form onSubmit={event => {event.preventDefault(); on_yt_submit();} }>
+            <TextField
+              fullWidth
+              label="Youtube Link"
+              type="search"
+              variant="filled"
+              autoComplete="off"
+              margin="normal"
+              value={yt_link}
+              onChange={(event: React.ChangeEvent<HTMLInputElement>) => {
+                setYtLink(event.target.value);
+              }}
+            />
+          </form>
+          <List>
+            <ListSubheader>Queue</ListSubheader>
+            {recv.map(item =>
+              <>
+                <ListItem>
+                  <ListItemText>
+                    {item}
+                  </ListItemText>
+                </ListItem>
+                <Divider />
+              </>,
+            )}
+          </List>
+        </Container>
+      </Box>
+    </ThemeProvider>
   );
 }
 
