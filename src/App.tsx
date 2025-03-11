@@ -20,6 +20,7 @@ import { get_theme, ThemeId } from './theme.ts';
 
 function App() {
   const [theme, setTheme] = useState(ThemeId.Dark);
+  const [now_playing, setNowPlaying] = useState<{title: string}| null>(null);
   const [recv, setRecv] = useState<string[]>([]);
   const [yt_link, setYtLink] = useState("");
   const session = useSession(
@@ -32,7 +33,14 @@ function App() {
       try {
         const body = JSON.parse(event.data);
         if (body["msg"] == "queue") {
+          const msg_now_playing =
+            body["now_playing"] as {title: string} | undefined;
           const queue = body["queue"] as Array<{title: string}>;
+          if (msg_now_playing !== undefined) {
+            setNowPlaying(msg_now_playing!);
+          } else {
+            setNowPlaying(null);
+          }
           setRecv(queue.map(item => item["title"]));
         }
       } catch {
@@ -89,6 +97,15 @@ function App() {
             />
           </form>
           <List>
+            <ListSubheader>Now Playing</ListSubheader>
+            {now_playing ? <>
+              <ListItem>
+                <ListItemText>
+                  {now_playing!.title}
+                </ListItemText>
+              </ListItem>
+              <Divider />
+            </> : null}
             <ListSubheader>Queue</ListSubheader>
             {recv.map(item =>
               <>
