@@ -104,7 +104,6 @@ fn get_ytdlp(url: &str) -> anyhow::Result<Vec<YoutubeInfo>> {
     let output = Command::new("yt-dlp")
         .arg("-j")
         .arg("--skip-download")
-        .arg("--flat-playlist")
         .arg("--no-warning")
         .arg(url)
         .stdin(Stdio::null())
@@ -211,8 +210,10 @@ fn handle(stream: TcpStream, state: &Mutex<AppState>) -> anyhow::Result<()> {
                 websocket.send(Message::text(link))?;
 
                 let list = get_ytdlp(link).unwrap();
-                let info = list.into_iter().next().unwrap();
-                state.lock().unwrap().queue.push_back(info);
+                let mut state = state.lock().unwrap();
+                for info in list {
+                    state.queue.push_back(info);
+                }
             }
         }
     }
