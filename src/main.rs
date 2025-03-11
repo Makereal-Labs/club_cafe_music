@@ -31,7 +31,7 @@ fn main() {
                     let format = info
                         .formats
                         .iter()
-                        .filter(|m| m.acodec.clone().map(|s| s != "none").unwrap_or(false))
+                        .filter(|m| m.acodec.clone().is_some_and(|s| s != "none"))
                         .reduce(|acc, e| {
                             std::cmp::max_by_key(acc, e, |v| v.quality.unwrap_or(-10.0) as i32)
                         });
