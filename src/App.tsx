@@ -76,11 +76,12 @@ function App() {
             <Typography variant="h6">
               Makereal Labs café music player
             </Typography>
+            <Box sx={{ flexGrow: 1 }} />
+            <ThemeToggle value={theme} onClick={on_theme_toggle} />
           </Toolbar>
         </AppBar>
         <Container>
           <Toolbar />
-          <ThemeToggle value={theme} onClick={on_theme_toggle} />
           <Player />
           <form onSubmit={event => {event.preventDefault(); on_yt_submit();} }>
             <TextField
