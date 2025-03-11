@@ -44,7 +44,7 @@ function Player() {
     }}>
       <Slider
         size="small"
-        sx={{ color: "white" }}
+        color="secondary"
         min={0}
         step={1}
         max={total_time}

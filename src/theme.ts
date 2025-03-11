@@ -17,13 +17,17 @@ const light_theme = createTheme({
   palette: {
     mode: 'light',
     primary: {
-      main: '#4347b2',
+      main: '#6969b0',
     },
     secondary: {
-      main: '#ECCD01',
+      main: '#e6ca00',
     },
     error: {
       main: red.A400,
+    },
+    background: {
+      default: grey[200],
+      paper: grey[200],
     },
   },
 });
@@ -33,10 +37,10 @@ const dark_theme = createTheme({
   palette: {
     mode: 'dark',
     primary: {
-      main: '#4347b2',
+      main: '#686bc1',
     },
     secondary: {
-      main: '#ECCD01',
+      main: '#eccd01',
     },
     error: {
       main: red.A400,
