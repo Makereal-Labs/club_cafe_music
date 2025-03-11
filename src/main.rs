@@ -8,14 +8,25 @@ use std::thread::sleep;
 use std::time::Duration;
 use tungstenite::{Message, accept};
 
+#[derive(Debug, Default)]
+struct AppState {
+    now_playing: Option<YoutubeInfo>,
+    queue: VecDeque<YoutubeInfo>,
+}
+
 fn main() {
-    let queue: Mutex<VecDeque<YoutubeInfo>> = Mutex::new(VecDeque::new());
+    let state: Mutex<AppState> = Mutex::new(AppState::default());
 
     let server = TcpListener::bind("0.0.0.0:9001").unwrap();
     std::thread::scope(|s| {
         s.spawn(|| {
             loop {
-                let info = queue.lock().unwrap().pop_front();
+                let info = {
+                    let mut state = state.lock().unwrap();
+                    let info = state.queue.pop_front();
+                    state.now_playing = info.clone();
+                    info
+                };
                 if let Some(info) = info {
                     let format = info
                         .formats
@@ -43,9 +54,9 @@ fn main() {
         for stream in server.incoming() {
             match stream {
                 Ok(stream) => {
-                    let ref_queue = &queue;
+                    let ref_state = &state;
                     s.spawn(move || {
-                        if let Err(error) = handle(stream, ref_queue) {
+                        if let Err(error) = handle(stream, ref_state) {
                             eprintln!("Error while handling socket: {error}");
                         }
                     });
@@ -140,17 +151,27 @@ fn vlc(url: &str) -> anyhow::Result<()> {
     Ok(())
 }
 
-fn handle(stream: TcpStream, queue: &Mutex<VecDeque<YoutubeInfo>>) -> anyhow::Result<()> {
+fn handle(stream: TcpStream, state: &Mutex<AppState>) -> anyhow::Result<()> {
     let mut websocket = accept(stream)?;
 
-    websocket.send(Message::Text(
+    let msg = {
+        let state = state.lock().unwrap();
+        let now_playing = state
+            .now_playing
+            .as_ref()
+            .map(|info| json!({"title": info.title}));
+        let queue = state
+            .queue
+            .iter()
+            .map(|info| json!({"title": info.title}))
+            .collect::<Vec<_>>();
         serde_json::to_string(&json!({
             "msg": "queue",
-            "queue": queue.lock().unwrap().iter()
-                .map(|info| json!({"title": info.title})).collect::<Vec<_>>()
+            "now_playing": now_playing,
+            "queue": queue,
         }))?
-        .into(),
-    ))?;
+    };
+    websocket.send(Message::Text(msg.into()))?;
 
     loop {
         let msg = match websocket.read() {
@@ -191,7 +212,7 @@ fn handle(stream: TcpStream, queue: &Mutex<VecDeque<YoutubeInfo>>) -> anyhow::Re
 
                 let list = get_ytdlp(link).unwrap();
                 let info = list.into_iter().next().unwrap();
-                queue.lock().unwrap().push_back(info);
+                state.lock().unwrap().queue.push_back(info);
             }
         }
     }
