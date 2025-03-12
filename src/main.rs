@@ -3,9 +3,10 @@ use serde_json::json;
 use std::collections::VecDeque;
 use std::net::{TcpListener, TcpStream};
 use std::process::{Command, Stdio};
-use std::sync::Mutex;
-use std::thread::sleep;
+use std::sync::{Mutex, mpsc};
+use std::thread::{sleep, yield_now};
 use std::time::Duration;
+use tungstenite::util::NonBlockingError;
 use tungstenite::{Message, accept};
 
 #[derive(Debug, Default)]
@@ -14,8 +15,12 @@ struct AppState {
     queue: VecDeque<YoutubeInfo>,
 }
 
+#[derive(Debug)]
+struct Event;
+
 fn main() {
     let state: Mutex<AppState> = Mutex::new(AppState::default());
+    let mut event_listeners = Vec::new();
 
     let server = TcpListener::bind("0.0.0.0:9001").unwrap();
     std::thread::scope(|s| {
@@ -54,12 +59,19 @@ fn main() {
         for stream in server.incoming() {
             match stream {
                 Ok(stream) => {
-                    let ref_state = &state;
-                    s.spawn(move || {
-                        if let Err(error) = handle(stream, ref_state) {
-                            eprintln!("Error while handling socket: {error}");
-                        }
-                    });
+                    if let Ok(()) = stream.set_nonblocking(true) {
+                        let ref_state = &state;
+                        let (tx, rx) = mpsc::channel();
+                        let _ = tx.send(Event);
+                        event_listeners.push(tx);
+                        s.spawn(move || {
+                            if let Err(error) = handle(stream, ref_state, rx) {
+                                eprintln!("Error while handling socket: {error}");
+                            }
+                        });
+                    } else {
+                        eprintln!("set_nonblocking failed");
+                    }
                 }
                 Err(error) => {
                     eprintln!("Error listening socket: {error}");
@@ -150,71 +162,91 @@ fn vlc(url: &str) -> anyhow::Result<()> {
     Ok(())
 }
 
-fn handle(stream: TcpStream, state: &Mutex<AppState>) -> anyhow::Result<()> {
+fn handle(
+    stream: TcpStream,
+    state: &Mutex<AppState>,
+    event_recv: mpsc::Receiver<Event>,
+) -> anyhow::Result<()> {
     let mut websocket = accept(stream)?;
 
-    let msg = {
-        let state = state.lock().unwrap();
-        let now_playing = state
-            .now_playing
-            .as_ref()
-            .map(|info| json!({"title": info.title}));
-        let queue = state
-            .queue
-            .iter()
-            .map(|info| json!({"title": info.title}))
-            .collect::<Vec<_>>();
-        serde_json::to_string(&json!({
-            "msg": "queue",
-            "now_playing": now_playing,
-            "queue": queue,
-        }))?
-    };
-    websocket.send(Message::Text(msg.into()))?;
-
     loop {
-        let msg = match websocket.read() {
-            Ok(msg) => msg,
-            Err(tungstenite::Error::ConnectionClosed) => {
+        match event_recv.try_recv() {
+            Ok(_event) => {
+                let msg = {
+                    let state = state.lock().unwrap();
+                    let now_playing = state
+                        .now_playing
+                        .as_ref()
+                        .map(|info| json!({"title": info.title}));
+                    let queue = state
+                        .queue
+                        .iter()
+                        .map(|info| json!({"title": info.title}))
+                        .collect::<Vec<_>>();
+                    serde_json::to_string(&json!({
+                        "msg": "queue",
+                        "now_playing": now_playing,
+                        "queue": queue,
+                    }))?
+                };
+                websocket.send(Message::Text(msg.into()))?;
+            }
+            Err(mpsc::TryRecvError::Empty) => {}
+            Err(mpsc::TryRecvError::Disconnected) => {
                 return Ok(());
             }
-            Err(err) => {
+        }
+
+        let msg = match websocket.read().map_err(|e| e.into_non_blocking()) {
+            Ok(msg) => Some(msg),
+            Err(None) => {
+                // No message has been sent yet (no error occured)
+                None
+            }
+            Err(Some(tungstenite::Error::ConnectionClosed)) => {
+                return Ok(());
+            }
+            Err(Some(err)) => {
                 return Err(err.into());
             }
         };
 
-        use serde_json::Value::*;
-        let msg = match msg {
-            Message::Text(msg) => msg,
-            _ => {
-                continue;
-            }
-        };
+        if let Some(msg) = msg {
+            use serde_json::Value::*;
+            let msg = match msg {
+                Message::Text(msg) => msg,
+                _ => {
+                    continue;
+                }
+            };
 
-        let obj = match serde_json::from_str(&msg) {
-            Ok(Object(obj)) => obj,
-            _ => {
-                continue;
-            }
-        };
+            let obj = match serde_json::from_str(&msg) {
+                Ok(Object(obj)) => obj,
+                _ => {
+                    continue;
+                }
+            };
 
-        let msg = match obj.get("msg") {
-            Some(String(msg)) => msg,
-            _ => {
-                continue;
-            }
-        };
+            let msg = match obj.get("msg") {
+                Some(String(msg)) => msg,
+                _ => {
+                    continue;
+                }
+            };
 
-        if msg == "yt" {
-            if let Some(String(link)) = obj.get("link") {
-                websocket.send(Message::text(link))?;
+            if msg == "yt" {
+                if let Some(String(link)) = obj.get("link") {
+                    websocket.send(Message::text(link))?;
 
-                let list = get_ytdlp(link).unwrap();
-                let mut state = state.lock().unwrap();
-                for info in list {
-                    state.queue.push_back(info);
+                    let list = get_ytdlp(link).unwrap();
+                    let mut state = state.lock().unwrap();
+                    for info in list {
+                        state.queue.push_back(info);
+                    }
                 }
             }
+        } else {
+            yield_now();
         }
     }
 }
