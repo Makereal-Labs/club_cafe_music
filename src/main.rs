@@ -1,6 +1,7 @@
 use serde::Deserialize;
 use serde_json::json;
 use std::collections::VecDeque;
+use std::io;
 use std::net::{TcpListener, TcpStream};
 use std::process::{Command, Stdio};
 use std::sync::{Mutex, mpsc};
@@ -15,16 +16,21 @@ struct AppState {
     queue: VecDeque<YoutubeInfo>,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone, Copy)]
 struct Event;
 
 fn main() {
     let state: Mutex<AppState> = Mutex::new(AppState::default());
     let mut event_listeners = Vec::new();
+    let (broadcast_tx, broadcast_rx) = mpsc::channel::<Event>();
 
     let server = TcpListener::bind("0.0.0.0:9001").unwrap();
+    server.set_nonblocking(true).expect("Cannot set non-blocking");
+
     std::thread::scope(|s| {
         s.spawn(|| {
+            let broadcast_tx = broadcast_tx.clone();
+            let mut queue_was_not_empty = true;
             loop {
                 let info = {
                     let mut state = state.lock().unwrap();
@@ -32,6 +38,13 @@ fn main() {
                     state.now_playing = info.clone();
                     info
                 };
+
+                if queue_was_not_empty || info.is_some() {
+                    let _ = broadcast_tx.send(Event);
+                }
+
+                queue_was_not_empty = info.is_some();
+
                 if let Some(info) = info {
                     let format = info
                         .formats
@@ -73,10 +86,19 @@ fn main() {
                         eprintln!("set_nonblocking failed");
                     }
                 }
+                Err(ref error) if error.kind() == io::ErrorKind::WouldBlock => {}
                 Err(error) => {
                     eprintln!("Error listening socket: {error}");
                 }
             }
+
+            if let Ok(event) = broadcast_rx.try_recv() {
+                event_listeners.retain(|listener| {
+                    listener.send(event).is_ok()
+                });
+            }
+
+            yield_now();
         }
     });
 }
