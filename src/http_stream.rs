@@ -50,3 +50,13 @@ impl io::Seek for HttpStream {
         Ok(self.progress as u64)
     }
 }
+
+impl symphonia::core::io::MediaSource for HttpStream {
+    fn is_seekable(&self) -> bool {
+        false
+    }
+
+    fn byte_len(&self) -> Option<u64> {
+        Some(self.len as u64)
+    }
+}
