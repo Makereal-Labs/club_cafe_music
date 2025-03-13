@@ -7,11 +7,5 @@ edition = "2024"
 anyhow = "1.0.96"
 reqwest = { version = "0.12.12", features = ["blocking"] }
 rodio = { version = "0.20.1", default-features = false }
-#symphonia = { version = "0.5.4", features = ["all"] }
+symphonia = { version = "0.5.4", features = ["all"] }
 tungstenite = "0.26.2"
-
-[dependencies.symphonia]
-#git = "https://github.com/pdeljanov/Symphonia.git"
-#rev = "ef9bbd8"
-version = "0.5.4"
-features = [ "all" ]
