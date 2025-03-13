@@ -2,7 +2,7 @@ use std::collections::VecDeque;
 
 use rodio::Source;
 use symphonia::core::{
-    audio::SampleBuffer,
+    audio::{AudioBuffer, SampleBuffer},
     codecs::{CODEC_TYPE_NULL, CodecParameters, Decoder, DecoderOptions},
     errors::Error as SymphoniaError,
     formats::{FormatOptions, FormatReader},
@@ -39,8 +39,8 @@ pub struct DecodeSource {
     format: Box<dyn FormatReader>,
     decoder: Box<dyn Decoder>,
     buf: VecDeque<f32>,
-    codec_params: CodecParameters,
     track_id: u32,
+    audio_buf: AudioBuffer<f32>,
 }
 
 impl DecodeSource {
@@ -55,12 +55,13 @@ impl DecodeSource {
         let decoder = codec.make(&codec_params, &options)?;
 
         let buf = VecDeque::new();
+        let audio_buf = AudioBuffer::unused();
         Ok(DecodeSource {
             format,
             decoder,
             buf,
-            codec_params,
             track_id,
+            audio_buf,
         })
     }
 }
@@ -84,10 +85,14 @@ impl Iterator for DecodeSource {
                     break;
                 }
             };
-            let decoded = decoded.make_equivalent::<f32>();
-            let spec = decoded.spec();
+            if self.audio_buf.is_unused() {
+                self.audio_buf = decoded.make_equivalent::<f32>();
+            } else {
+                decoded.convert(&mut self.audio_buf);
+            }
+            let spec = self.audio_buf.spec();
             let mut buffer = SampleBuffer::new(decoded.capacity() as u64, *spec);
-            buffer.copy_interleaved_typed(&decoded);
+            buffer.copy_interleaved_typed(&self.audio_buf);
             self.buf = buffer.samples().to_owned().into();
         }
         self.buf.pop_front()
@@ -100,11 +105,11 @@ impl Source for DecodeSource {
     }
 
     fn channels(&self) -> u16 {
-        self.codec_params.channels.unwrap().count() as u16
+        self.decoder.codec_params().channels.unwrap().count() as u16
     }
 
     fn sample_rate(&self) -> u32 {
-        self.codec_params.sample_rate.unwrap()
+        self.decoder.codec_params().sample_rate.unwrap()
     }
 
     fn total_duration(&self) -> Option<std::time::Duration> {
