@@ -87,9 +87,8 @@ impl Iterator for DecodeSource {
             };
             if self.audio_buf.is_unused() {
                 self.audio_buf = decoded.make_equivalent::<f32>();
-            } else {
-                decoded.convert(&mut self.audio_buf);
             }
+            decoded.convert(&mut self.audio_buf);
             let spec = self.audio_buf.spec();
             let mut buffer = SampleBuffer::new(decoded.capacity() as u64, *spec);
             buffer.copy_interleaved_typed(&self.audio_buf);
