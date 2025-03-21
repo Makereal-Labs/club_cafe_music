@@ -1,15 +1,27 @@
-use std::collections::VecDeque;
+use std::{collections::VecDeque, sync::LazyLock};
 
 use rodio::Source;
-use symphonia::core::{
-    audio::{AudioBuffer, SampleBuffer},
-    codecs::{CODEC_TYPE_NULL, CodecParameters, Decoder, DecoderOptions},
-    errors::Error as SymphoniaError,
-    formats::{FormatOptions, FormatReader},
-    io::{MediaSource, MediaSourceStream, MediaSourceStreamOptions},
-    meta::MetadataOptions,
-    probe::{Hint, ProbeResult},
+use symphonia::{
+    core::{
+        audio::{AudioBuffer, Layout, SampleBuffer},
+        codecs::{CODEC_TYPE_NULL, CodecParameters, CodecRegistry, Decoder, DecoderOptions},
+        errors::Error as SymphoniaError,
+        formats::{FormatOptions, FormatReader},
+        io::{MediaSource, MediaSourceStream, MediaSourceStreamOptions},
+        meta::MetadataOptions,
+        probe::{Hint, ProbeResult},
+    },
+    default::register_enabled_codecs,
 };
+
+use crate::opus_decoder::OPUS_CODEC_DESCRIPTOR;
+
+static CODEC: LazyLock<CodecRegistry> = LazyLock::new(|| {
+    let mut codec = CodecRegistry::new();
+    register_enabled_codecs(&mut codec);
+    codec.register(&OPUS_CODEC_DESCRIPTOR);
+    codec
+});
 
 pub fn decode(source: Box<dyn MediaSource>) -> Result<DecodeSource, SymphoniaError> {
     let probe = symphonia::default::get_probe();
@@ -49,10 +61,8 @@ impl DecodeSource {
         codec_params: CodecParameters,
         track_id: u32,
     ) -> Result<Self, SymphoniaError> {
-        let codec = symphonia::default::get_codecs();
-
         let options = DecoderOptions { verify: true };
-        let decoder = codec.make(&codec_params, &options)?;
+        let decoder = CODEC.make(&codec_params, &options)?;
 
         let buf = VecDeque::new();
         let audio_buf = AudioBuffer::unused();
@@ -104,7 +114,12 @@ impl Source for DecodeSource {
     }
 
     fn channels(&self) -> u16 {
-        self.decoder.codec_params().channels.unwrap().count() as u16
+        let params = self.decoder.codec_params();
+        params
+            .channels
+            .or(params.channel_layout.map(Layout::into_channels))
+            .unwrap()
+            .count() as u16
     }
 
     fn sample_rate(&self) -> u32 {

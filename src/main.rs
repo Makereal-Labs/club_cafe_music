@@ -1,7 +1,6 @@
 use reqwest::blocking::Client;
 use rodio::{Sink, source::Source};
 use std::collections::VecDeque;
-use std::io::Read;
 use std::mem::forget;
 use std::net::{TcpListener, TcpStream};
 use std::process::{Command, Stdio};
@@ -15,6 +14,8 @@ use http_stream::HttpStream;
 mod decoder;
 use decoder::decode;
 
+mod opus_decoder;
+
 fn main() {
     let (stream, stream_handle) = rodio::OutputStream::try_default().unwrap();
     forget(stream);
@@ -27,12 +28,9 @@ fn main() {
     let list = get_ytdlp(url).unwrap();
     let link = list[0].clone();
 
-    let mut http_stream = HttpStream::new(client.clone(), link).unwrap();
-    let mut buf = Vec::new();
-    http_stream.read_to_end(&mut buf).unwrap();
-    std::fs::write("test.opus", buf).unwrap();
+    let http_stream = HttpStream::new(client.clone(), link).unwrap();
 
-    let source = decode(Box::new(std::fs::File::open("test.ogg").unwrap())).unwrap();
+    let source = decode(Box::new(http_stream)).unwrap();
     //println!("{}", source.into_iter().collect::<Vec<_>>().len());
     sink.append(source);
     println!("debug1");
