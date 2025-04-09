@@ -1,39 +1,83 @@
 use reqwest::blocking::Client;
 use std::cmp::min;
-use std::io::{self, Write};
+use std::io;
+use std::sync::Mutex;
+use std::sync::mpsc::{Receiver, sync_channel};
+
+const BUFFER_SIZE: usize = 32 * 1024;
+const REQ_CHUNK_SIZE: usize = 4 * 1024;
 
 pub struct HttpStream {
-    client: Client,
-    url: String,
     len: usize,
     progress: usize,
+    rx: Mutex<Receiver<io::Result<u8>>>,
 }
 
 impl HttpStream {
     pub fn new(client: Client, url: impl Into<String>) -> anyhow::Result<Self> {
         let url = url.into();
         let response = client.get(&url).send()?;
-        let len = response.content_length().ok_or(anyhow::anyhow!("Content-Length unknown"))? as usize;
-        Ok(HttpStream { client, url, len, progress: 0 })
+        let len = response
+            .content_length()
+            .ok_or(anyhow::anyhow!("Content-Length unknown"))? as usize;
+        let (tx, rx) = sync_channel(BUFFER_SIZE);
+        {
+            let url = url.clone();
+            std::thread::spawn(move || {
+                let mut progress = 0;
+                while progress < len {
+                    let chunk_size = min(progress + REQ_CHUNK_SIZE, len);
+                    println!("Range: {:8} {:8}", progress, chunk_size);
+                    let response = client
+                        .get(&url)
+                        .header("Range", format!("bytes={}-{}", progress, chunk_size))
+                        .send()
+                        .map_err(|err| io::Error::new(io::ErrorKind::Other, Box::new(err)));
+                    let response = match response {
+                        Ok(response) => response,
+                        Err(error) => {
+                            tx.send(Err(error)).unwrap();
+                            break;
+                        }
+                    };
+                    let bytes = response
+                        .bytes()
+                        .map_err(|err| io::Error::new(io::ErrorKind::Other, Box::new(err)));
+                    let bytes = match bytes {
+                        Ok(bytes) => bytes,
+                        Err(error) => {
+                            tx.send(Err(error)).unwrap();
+                            break;
+                        }
+                    };
+                    progress += bytes.len();
+                    for b in bytes {
+                        tx.send(Ok(b)).unwrap();
+                    }
+                }
+            });
+        }
+        let rx = Mutex::new(rx);
+        Ok(HttpStream {
+            len,
+            progress: 0,
+            rx,
+        })
     }
 }
 
 impl io::Read for HttpStream {
-    fn read(&mut self, mut buf: &mut [u8]) -> io::Result<usize> {
+    fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
         if self.progress >= self.len {
             return Ok(0);
         }
-        let section_end = min(self.progress + buf.len(), self.len);
-        println!("Range: {:8} {:8}", self.progress, section_end);
-        let response = self.client.get(&self.url)
-            .header("Range", format!("bytes={}-{}", self.progress, section_end))
-            .send()
-            .map_err(|err| io::Error::new(io::ErrorKind::Other, Box::new(err)))?;
-        let bytes = response.bytes()
-            .map_err(|err| io::Error::new(io::ErrorKind::Other, Box::new(err)))?;
-        let actual_len = buf.write(&bytes)?;
-        self.progress += actual_len;
-        Ok(actual_len)
+        let chunk_size = min(self.progress + buf.len(), self.len);
+        let rx = self.rx.lock().expect("rx failed to lock");
+        for b in &mut buf[0..chunk_size] {
+            *b = rx.recv().unwrap()?;
+        }
+        self.progress += chunk_size;
+        Ok(chunk_size)
     }
 }
 
@@ -45,7 +89,8 @@ impl io::Seek for HttpStream {
             SeekFrom::End(offset) => self.len as i64 + offset,
             SeekFrom::Current(offset) => self.progress as i64 + offset,
         };
-        self.progress = pos.try_into()
+        self.progress = pos
+            .try_into()
             .map_err(|err| io::Error::new(io::ErrorKind::InvalidInput, Box::new(err)))?;
         Ok(self.progress as u64)
     }
