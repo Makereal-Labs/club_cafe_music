@@ -4,8 +4,8 @@ use std::io;
 use std::sync::Mutex;
 use std::sync::mpsc::{Receiver, sync_channel};
 
-const BUFFER_SIZE: usize = 32 * 1024;
-const REQ_CHUNK_SIZE: usize = 4 * 1024;
+const BUFFER_SIZE: usize = 4 * 1024 * 1024;
+const REQ_CHUNK_SIZE: usize = 64 * 1024;
 
 pub struct HttpStream {
     len: usize,
