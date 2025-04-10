@@ -71,7 +71,7 @@ impl io::Read for HttpStream {
         if self.progress >= self.len {
             return Ok(0);
         }
-        let chunk_size = min(self.progress + buf.len(), self.len);
+        let chunk_size = min(self.progress + buf.len(), self.len) - self.progress;
         let rx = self.rx.lock().expect("rx failed to lock");
         for b in &mut buf[0..chunk_size] {
             *b = rx.recv().unwrap()?;
