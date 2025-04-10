@@ -1,8 +1,8 @@
 use reqwest::blocking::Client;
 use std::cmp::min;
 use std::io;
+use std::sync::mpsc::{sync_channel, Receiver};
 use std::sync::Mutex;
-use std::sync::mpsc::{Receiver, sync_channel};
 
 const BUFFER_SIZE: usize = 4 * 1024 * 1024;
 const REQ_CHUNK_SIZE: usize = 64 * 1024;
@@ -26,11 +26,10 @@ impl HttpStream {
             std::thread::spawn(move || {
                 let mut progress = 0;
                 while progress < len {
-                    let chunk_size = min(progress + REQ_CHUNK_SIZE, len);
-                    println!("Range: {:8} {:8}", progress, chunk_size);
+                    let chunk_end = min(progress + REQ_CHUNK_SIZE, len);
                     let response = client
                         .get(&url)
-                        .header("Range", format!("bytes={}-{}", progress, chunk_size))
+                        .header("Range", format!("bytes={}-{}", progress, chunk_end - 1))
                         .send()
                         .map_err(|err| io::Error::new(io::ErrorKind::Other, Box::new(err)));
                     let response = match response {
