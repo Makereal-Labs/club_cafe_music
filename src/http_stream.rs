@@ -36,8 +36,8 @@ impl HttpStream {
                     let response = match response {
                         Ok(response) => response,
                         Err(error) => {
-                            tx.send(Err(error)).unwrap();
-                            break;
+                            let _ = tx.send(Err(error));
+                            return;
                         }
                     };
                     let bytes = response
@@ -46,13 +46,15 @@ impl HttpStream {
                     let bytes = match bytes {
                         Ok(bytes) => bytes,
                         Err(error) => {
-                            tx.send(Err(error)).unwrap();
-                            break;
+                            let _ = tx.send(Err(error));
+                            return;
                         }
                     };
                     progress += bytes.len();
                     for b in bytes {
-                        tx.send(Ok(b)).unwrap();
+                        if tx.send(Ok(b)).is_err() {
+                            return;
+                        }
                     }
                 }
             });

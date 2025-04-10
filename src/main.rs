@@ -1,107 +1,78 @@
-use reqwest::blocking::Client;
-use rodio::{Sink, source::Source};
-use std::collections::VecDeque;
-use std::mem::forget;
-use std::net::{TcpListener, TcpStream};
-use std::process::{Command, Stdio};
-use std::thread::sleep;
-use std::time::Duration;
-use tungstenite::accept;
-
-mod http_stream;
-use http_stream::HttpStream;
-
 mod decoder;
-use decoder::decode;
-
+mod handler;
+mod http_stream;
 mod opus_decoder;
+mod player;
+mod yt_dlp;
+
+use std::collections::VecDeque;
+use std::io;
+use std::net::TcpListener;
+use std::sync::{Mutex, mpsc};
+use std::thread::yield_now;
+
+use handler::handle;
+use player::player;
+use yt_dlp::YoutubeInfo;
+
+#[derive(Debug, Default)]
+struct AppState {
+    now_playing: Option<YoutubeInfo>,
+    queue: VecDeque<YoutubeInfo>,
+}
+
+#[derive(Debug, Clone, Copy)]
+struct Event;
 
 fn main() {
-    let (stream, stream_handle) = rodio::OutputStream::try_default().unwrap();
-    forget(stream);
-    let sink = Sink::try_new(&stream_handle).unwrap();
-    let mut queue: VecDeque<Box<dyn Source<Item = f32> + Send>> = VecDeque::new();
+    let state: Mutex<AppState> = Mutex::new(AppState::default());
+    let mut event_listeners = Vec::new();
+    let (broadcast_tx, broadcast_rx) = mpsc::channel::<Event>();
 
-    let client = Client::new();
-
+    // Add a test item into queue
     let url = "https://www.youtube.com/watch?v=ertwyT4gnc0";
-    let list = get_ytdlp(url).unwrap();
-    let link = list[0].clone();
-
-    let http_stream = HttpStream::new(client.clone(), link).unwrap();
-
-    let source = decode(Box::new(http_stream)).unwrap();
-    //println!("{}", source.into_iter().collect::<Vec<_>>().len());
-    sink.append(source);
-    println!("debug1");
-    sink.sleep_until_end();
-    println!("debug2");
-    //queue.push_back(Box::new(source.convert_samples()));
+    let list = yt_dlp::get_ytdlp(url).unwrap()[0].clone();
+    state.lock().unwrap().queue.push_back(list);
 
     let server = TcpListener::bind("0.0.0.0:9001").unwrap();
+    server
+        .set_nonblocking(true)
+        .expect("Cannot set non-blocking");
+
     std::thread::scope(|s| {
-        s.spawn(|| {
-            sink.sleep_until_end();
-            sleep(Duration::from_millis(200));
-            if let Some(source) = queue.pop_front() {
-                sink.append(source);
-            }
+        let ref_broadcast_tx = broadcast_tx.clone();
+        let ref_state = &state;
+        s.spawn(move || {
+            player(ref_state, ref_broadcast_tx);
         });
         for stream in server.incoming() {
             match stream {
                 Ok(stream) => {
-                    s.spawn(move || {
-                        if let Err(error) = handle(stream) {
-                            eprintln!("Error while handling socket: {error}");
-                        }
-                    });
+                    if let Ok(()) = stream.set_nonblocking(true) {
+                        let ref_state = &state;
+                        let (tx, rx) = mpsc::channel();
+                        let _ = tx.send(Event);
+                        event_listeners.push(tx);
+                        s.spawn(move || {
+                            if let Err(error) = handle(stream, ref_state, rx) {
+                                eprintln!("Error while handling socket: {error}");
+                            }
+                        });
+                    } else {
+                        eprintln!("set_nonblocking failed");
+                    }
                 }
+                Err(ref error) if error.kind() == io::ErrorKind::WouldBlock => {}
                 Err(error) => {
                     eprintln!("Error listening socket: {error}");
                 }
             }
+
+            if let Ok(event) = broadcast_rx.try_recv() {
+                event_listeners.retain(|listener| listener.send(event).is_ok());
+            }
+
+            yield_now();
         }
     });
-}
-
-fn get_ytdlp(url: &str) -> anyhow::Result<Vec<String>> {
-    if matches!(url.chars().next(), None | Some('-')) {
-        return Err(anyhow::anyhow!("Invalid URL :{}", url));
-    }
-
-    let output = Command::new("yt-dlp")
-        .arg("--get-url")
-        .arg("--no-warning")
-        .arg(url)
-        .stdin(Stdio::null())
-        .stdout(Stdio::piped())
-        .stderr(Stdio::null())
-        .spawn()?
-        .wait_with_output()?;
-
-    if !output.status.success() {
-        return Err(anyhow::anyhow!("Call to yt-dlp failed: {}", output.status));
-    }
-
-    let result = std::str::from_utf8(&output.stdout)?;
-
-    let list = result
-        .lines()
-        .filter(|url| url.contains("mime=audio"))
-        .map(String::from)
-        .collect();
-
-    Ok(list)
-}
-
-fn handle(stream: TcpStream) -> anyhow::Result<()> {
-    let mut websocket = accept(stream)?;
-    loop {
-        let msg = websocket.read()?;
-
-        // We do not want to send back ping/pong messages.
-        if msg.is_binary() || msg.is_text() {
-            websocket.send(msg)?;
-        }
-    }
 }
