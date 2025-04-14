@@ -29,11 +29,6 @@ fn main() {
     let mut event_listeners = Vec::new();
     let (broadcast_tx, broadcast_rx) = mpsc::channel::<Event>();
 
-    // Add a test item into queue
-    let url = "https://www.youtube.com/watch?v=ertwyT4gnc0";
-    let list = yt_dlp::get_ytdlp(url).unwrap()[0].clone();
-    state.lock().unwrap().queue.push_back(list);
-
     let server = TcpListener::bind("0.0.0.0:9001").unwrap();
     server
         .set_nonblocking(true)
