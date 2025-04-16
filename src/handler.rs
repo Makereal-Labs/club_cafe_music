@@ -5,7 +5,7 @@ use std::thread::yield_now;
 use tungstenite::util::NonBlockingError;
 use tungstenite::{Message, accept};
 
-use crate::yt_dlp::get_ytdlp;
+use crate::yt_dlp::{YoutubeInfo, get_ytdlp};
 use crate::{AppState, Event};
 
 pub fn handle(
@@ -20,15 +20,12 @@ pub fn handle(
             Ok(_event) => {
                 let msg = {
                     let state = state.lock().unwrap();
-                    let now_playing = state
-                        .now_playing
-                        .as_ref()
-                        .map(|info| json!({"title": info.title}));
-                    let queue = state
-                        .queue
-                        .iter()
-                        .map(|info| json!({"title": info.title}))
-                        .collect::<Vec<_>>();
+                    let to_json = |info: &YoutubeInfo| {
+                        let url = format!("https://www.youtube.com/watch?v={}", info.id);
+                        json!({"title": info.title, "url": url})
+                    };
+                    let now_playing = state.now_playing.as_ref().map(to_json);
+                    let queue = state.queue.iter().map(to_json).collect::<Vec<_>>();
                     serde_json::to_string(&json!({
                         "msg": "queue",
                         "now_playing": now_playing,
