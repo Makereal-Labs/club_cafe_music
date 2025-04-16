@@ -4,6 +4,7 @@ import {
   Box,
   Container,
   Divider,
+  IconButton,
   List,
   ListItem,
   ListItemText,
@@ -17,11 +18,17 @@ import { useSession } from './session.ts';
 import Player from './Player.tsx';
 import ThemeToggle from './ThemeToggle.tsx';
 import { get_theme, ThemeId } from './theme.ts';
+import { Link } from '@mui/icons-material';
+
+type ListEntry = {
+  title: string,
+  url: string,
+};
 
 function App() {
   const [theme, setTheme] = useState(ThemeId.Dark);
-  const [now_playing, setNowPlaying] = useState<{title: string}| null>(null);
-  const [recv, setRecv] = useState<string[]>([]);
+  const [now_playing, setNowPlaying] = useState<ListEntry | null>(null);
+  const [recv, setRecv] = useState<Array<ListEntry>>([]);
   const [yt_link, setYtLink] = useState("");
   const session = useSession(
     // on open
@@ -34,14 +41,14 @@ function App() {
         const body = JSON.parse(event.data);
         if (body["msg"] == "queue") {
           const msg_now_playing =
-            body["now_playing"] as {title: string} | undefined;
-          const queue = body["queue"] as Array<{title: string}>;
+            body["now_playing"] as ListEntry | undefined;
+          const queue = body["queue"] as Array<ListEntry>;
           if (msg_now_playing !== undefined) {
             setNowPlaying(msg_now_playing!);
           } else {
             setNowPlaying(null);
           }
-          setRecv(queue.map(item => item["title"]));
+          setRecv(queue);
         }
       } catch {
         setRecv(recv.concat([event.data]));
@@ -100,7 +107,16 @@ function App() {
           <List>
             <ListSubheader>Now Playing</ListSubheader>
             {now_playing ? <>
-              <ListItem>
+              <ListItem
+                secondaryAction={
+                  <IconButton edge="end" aria-label="copy link"
+                    onClick={() => {
+                      navigator.clipboard.writeText(now_playing!.url);
+                    }}>
+                    <Link />
+                  </IconButton>
+                }
+              >
                 <ListItemText>
                   {now_playing!.title}
                 </ListItemText>
@@ -110,9 +126,18 @@ function App() {
             <ListSubheader>Queue</ListSubheader>
             {recv.map(item =>
               <>
-                <ListItem>
+                <ListItem
+                  secondaryAction={
+                    <IconButton edge="end" aria-label="copy link"
+                      onClick={() => {
+                        navigator.clipboard.writeText(item.url);
+                      }}>
+                      <Link />
+                    </IconButton>
+                  }
+                >
                   <ListItemText>
-                    {item}
+                    {item.title}
                   </ListItemText>
                 </ListItem>
                 <Divider />
