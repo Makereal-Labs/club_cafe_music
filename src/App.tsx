@@ -25,6 +25,32 @@ type ListEntry = {
   url: string,
 };
 
+function copyToClipboard(textToCopy: string) {
+  // Navigator clipboard api needs a secure context (https)
+  if (navigator.clipboard && window.isSecureContext) {
+    navigator.clipboard.writeText(textToCopy);
+  } else {
+    // Use the 'out of viewport hidden text area' trick
+    const textArea = document.createElement("textarea");
+    textArea.value = textToCopy;
+        
+    // Move textarea out of the viewport so it's not visible
+    textArea.style.position = "absolute";
+    textArea.style.left = "-999999px";
+        
+    document.body.prepend(textArea);
+    textArea.select();
+
+    try {
+      document.execCommand('copy');
+    } catch (error) {
+      console.error(error);
+    } finally {
+      textArea.remove();
+    }
+  }
+}
+
 function App() {
   const [theme, setTheme] = useState(ThemeId.Dark);
   const [now_playing, setNowPlaying] = useState<ListEntry | null>(null);
@@ -111,7 +137,7 @@ function App() {
                 secondaryAction={
                   <IconButton edge="end" aria-label="copy link"
                     onClick={() => {
-                      navigator.clipboard.writeText(now_playing!.url);
+                      copyToClipboard(now_playing!.url);
                     }}>
                     <Link />
                   </IconButton>
@@ -130,7 +156,7 @@ function App() {
                   secondaryAction={
                     <IconButton edge="end" aria-label="copy link"
                       onClick={() => {
-                        navigator.clipboard.writeText(item.url);
+                        copyToClipboard(item.url);
                       }}>
                       <Link />
                     </IconButton>
