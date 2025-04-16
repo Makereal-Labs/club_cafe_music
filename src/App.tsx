@@ -2,6 +2,7 @@ import { useCallback, useState } from 'react';
 import {
   AppBar,
   Box,
+  Button,
   Container,
   Divider,
   IconButton,
@@ -19,6 +20,7 @@ import Player from './Player.tsx';
 import ThemeToggle from './ThemeToggle.tsx';
 import { get_theme, ThemeId } from './theme.ts';
 import { Link } from '@mui/icons-material';
+import CustomSnackbar from './CustomSnackbar.tsx';
 
 type ListEntry = {
   title: string,
@@ -33,11 +35,11 @@ function copyToClipboard(textToCopy: string) {
     // Use the 'out of viewport hidden text area' trick
     const textArea = document.createElement("textarea");
     textArea.value = textToCopy;
-        
+
     // Move textarea out of the viewport so it's not visible
     textArea.style.position = "absolute";
     textArea.style.left = "-999999px";
-        
+
     document.body.prepend(textArea);
     textArea.select();
 
@@ -56,6 +58,9 @@ function App() {
   const [now_playing, setNowPlaying] = useState<ListEntry | null>(null);
   const [recv, setRecv] = useState<Array<ListEntry>>([]);
   const [yt_link, setYtLink] = useState("");
+  const [snackbar_message, setSnackbarMessage] =
+    useState<string | undefined>(undefined);
+  const [snackbar_key, setSnackbarKey] = useState(0);
   const session = useSession(
     // on open
     useCallback(() => { }, []),
@@ -101,6 +106,11 @@ function App() {
     session.send(JSON.stringify(msg));
   }
 
+  function display_snackbar(message: string) {
+    setSnackbarMessage(message);
+    setSnackbarKey(new Date().getTime());
+  }
+
   return (
     <ThemeProvider theme={get_theme(theme)}>
       <Box>
@@ -116,7 +126,7 @@ function App() {
         <Container>
           <Toolbar />
           <Player />
-          <form onSubmit={event => {event.preventDefault(); on_yt_submit();} }>
+          <form onSubmit={event => { event.preventDefault(); on_yt_submit(); }}>
             <TextField
               fullWidth
               label="Youtube Link"
@@ -170,7 +180,9 @@ function App() {
               </>,
             )}
           </List>
+          <Button onClick={() => display_snackbar("OAO")}>Test</Button>
         </Container>
+        <CustomSnackbar message={snackbar_message} key={snackbar_key} />
       </Box>
     </ThemeProvider>
   );
