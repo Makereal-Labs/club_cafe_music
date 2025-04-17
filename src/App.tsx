@@ -2,7 +2,6 @@ import { useCallback, useState } from 'react';
 import {
   AppBar,
   Box,
-  Button,
   Container,
   Divider,
   IconButton,
@@ -148,6 +147,7 @@ function App() {
                   <IconButton edge="end" aria-label="copy link"
                     onClick={() => {
                       copyToClipboard(now_playing!.url);
+                      display_snackbar("Link copied!");
                     }}>
                     <Link />
                   </IconButton>
@@ -167,6 +167,7 @@ function App() {
                     <IconButton edge="end" aria-label="copy link"
                       onClick={() => {
                         copyToClipboard(item.url);
+                        display_snackbar("Link copied!");
                       }}>
                       <Link />
                     </IconButton>
@@ -180,7 +181,6 @@ function App() {
               </>,
             )}
           </List>
-          <Button onClick={() => display_snackbar("OAO")}>Test</Button>
         </Container>
         <CustomSnackbar message={snackbar_message} key={snackbar_key} />
       </Box>
