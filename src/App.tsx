@@ -110,6 +110,27 @@ function App() {
     setSnackbarKey(new Date().getTime());
   }
 
+  function gen_queue_entry(item: ListEntry) {
+    return <>
+      <ListItem
+        secondaryAction={
+          <IconButton edge="end" aria-label="copy link"
+            onClick={() => {
+              copyToClipboard(item.url);
+              display_snackbar("Link copied!");
+            }}>
+            <Link />
+          </IconButton>
+        }
+      >
+        <ListItemText>
+          {item.title}
+        </ListItemText>
+      </ListItem>
+      <Divider />
+    </>;
+  }
+
   return (
     <ThemeProvider theme={get_theme(theme)}>
       <Box>
@@ -141,45 +162,9 @@ function App() {
           </form>
           <List>
             <ListSubheader>Now Playing</ListSubheader>
-            {now_playing ? <>
-              <ListItem
-                secondaryAction={
-                  <IconButton edge="end" aria-label="copy link"
-                    onClick={() => {
-                      copyToClipboard(now_playing!.url);
-                      display_snackbar("Link copied!");
-                    }}>
-                    <Link />
-                  </IconButton>
-                }
-              >
-                <ListItemText>
-                  {now_playing!.title}
-                </ListItemText>
-              </ListItem>
-              <Divider />
-            </> : null}
+            {now_playing ? gen_queue_entry(now_playing) : null}
             <ListSubheader>Queue</ListSubheader>
-            {recv.map(item =>
-              <>
-                <ListItem
-                  secondaryAction={
-                    <IconButton edge="end" aria-label="copy link"
-                      onClick={() => {
-                        copyToClipboard(item.url);
-                        display_snackbar("Link copied!");
-                      }}>
-                      <Link />
-                    </IconButton>
-                  }
-                >
-                  <ListItemText>
-                    {item.title}
-                  </ListItemText>
-                </ListItem>
-                <Divider />
-              </>,
-            )}
+            {recv.map(gen_queue_entry)}
           </List>
         </Container>
         <CustomSnackbar message={snackbar_message} key={snackbar_key} />
