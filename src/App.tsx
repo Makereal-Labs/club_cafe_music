@@ -24,6 +24,7 @@ import CustomSnackbar from './CustomSnackbar.tsx';
 type ListEntry = {
   title: string,
   url: string,
+  time: number,
 };
 
 function copyToClipboard(textToCopy: string) {
@@ -111,6 +112,10 @@ function App() {
   }
 
   function gen_queue_entry(item: ListEntry) {
+    const second = Math.floor(item.time % 60).toString().padStart(2, "0");
+    const minute = Math.floor(item.time / 60);
+    const time = (item.time) ? `${minute}:${second}` : "";
+
     return <>
       <ListItem
         secondaryAction={
@@ -123,9 +128,10 @@ function App() {
           </IconButton>
         }
       >
-        <ListItemText>
-          {item.title}
-        </ListItemText>
+        <ListItemText
+          primary={item.title}
+          secondary={time}
+        />
       </ListItem>
       <Divider />
     </>;
