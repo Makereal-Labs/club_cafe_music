@@ -112,9 +112,18 @@ function App() {
   }
 
   function gen_queue_entry(item: ListEntry) {
-    const second = Math.floor(item.time % 60).toString().padStart(2, "0");
-    const minute = Math.floor(item.time / 60);
-    const time = (item.time) ? `${minute}:${second}` : "";
+    let time = null;
+    if (item.time) {
+      const second = Math.floor(item.time % 60).toString().padStart(2, "0");
+      const minute = Math.floor(item.time / 60);
+      if (minute >= 60) {
+        const minute2 = Math.floor(minute % 60).toString().padStart(2, "0");
+        const hour = Math.floor(minute / 60);
+        time = `${hour}:${minute2}:${second}`;
+      } else {
+        time = `${minute}:${second}`;
+      }
+    }
 
     return <>
       <ListItem
