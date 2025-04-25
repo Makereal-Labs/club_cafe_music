@@ -9,7 +9,6 @@ use std::collections::VecDeque;
 use std::io;
 use std::net::TcpListener;
 use std::sync::{Mutex, mpsc};
-use std::thread::yield_now;
 
 use handler::handle;
 use player::player;
@@ -26,7 +25,7 @@ struct Event;
 
 fn main() {
     let state: Mutex<AppState> = Mutex::new(AppState::default());
-    let mut event_listeners = Vec::new();
+    let event_listeners = Mutex::new(Vec::new());
     let (broadcast_tx, broadcast_rx) = mpsc::channel::<Event>();
 
     let server = TcpListener::bind("0.0.0.0:9001").unwrap();
@@ -40,34 +39,40 @@ fn main() {
         s.spawn(move || {
             player(ref_state, ref_broadcast_tx);
         });
-        for stream in server.incoming() {
-            match stream {
-                Ok(stream) => {
-                    if let Ok(()) = stream.set_nonblocking(true) {
-                        let ref_state = &state;
-                        let (tx, rx) = mpsc::channel();
-                        let _ = tx.send(Event);
-                        event_listeners.push(tx);
-                        s.spawn(move || {
-                            if let Err(error) = handle(stream, ref_state, rx) {
-                                eprintln!("Error while handling socket: {error}");
-                            }
-                        });
-                    } else {
-                        eprintln!("set_nonblocking failed");
+        let ref_state = &state;
+        let ref_event_listeners = &event_listeners;
+        s.spawn(move || {
+            for stream in server.incoming() {
+                match stream {
+                    Ok(stream) => {
+                        if let Ok(()) = stream.set_nonblocking(true) {
+                            let (tx, rx) = mpsc::channel();
+                            let _ = tx.send(Event);
+                            ref_event_listeners.lock().unwrap().push(tx);
+                            s.spawn(move || {
+                                if let Err(error) = handle(stream, ref_state, rx) {
+                                    eprintln!("Error while handling socket: {error}");
+                                }
+                            });
+                        } else {
+                            eprintln!("set_nonblocking failed");
+                        }
+                    }
+                    Err(ref error) if error.kind() == io::ErrorKind::WouldBlock => {}
+                    Err(error) => {
+                        eprintln!("Error listening socket: {error}");
                     }
                 }
-                Err(ref error) if error.kind() == io::ErrorKind::WouldBlock => {}
-                Err(error) => {
-                    eprintln!("Error listening socket: {error}");
-                }
             }
-
-            if let Ok(event) = broadcast_rx.try_recv() {
-                event_listeners.retain(|listener| listener.send(event).is_ok());
+        });
+        let ref_event_listeners = &event_listeners;
+        s.spawn(move || {
+            while let Ok(event) = broadcast_rx.recv() {
+                ref_event_listeners
+                    .lock()
+                    .unwrap()
+                    .retain(|listener| listener.send(event).is_ok());
             }
-
-            yield_now();
-        }
+        });
     });
 }
