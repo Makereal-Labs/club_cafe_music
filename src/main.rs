@@ -24,14 +24,14 @@ struct AppState {
 struct Event;
 
 fn main() {
-    let state: &_ = Box::leak(Box::new(Mutex::new(AppState::default())));
+    let state = Mutex::new(AppState::default());
     let event_listeners = Mutex::new(Vec::new());
     let (broadcast_tx, broadcast_rx) = channel::unbounded::<Event>();
 
     let server = block_on(TcpListener::bind("0.0.0.0:9001")).unwrap();
 
     let ex = Executor::new();
-    let task = player(state, broadcast_tx);
+    let task = player(&state, broadcast_tx);
     let task = zip(task, async {
         let mut incoming = server.incoming();
         while let Some(stream) = incoming.next().await {
@@ -40,8 +40,8 @@ fn main() {
                     let (tx, rx) = channel::unbounded();
                     let _ = tx.send(Event).await;
                     event_listeners.lock().await.push(tx);
-                    ex.spawn(async move {
-                        if let Err(error) = handle(stream, state, rx).await {
+                    ex.spawn(async {
+                        if let Err(error) = handle(stream, &state, rx).await {
                             eprintln!("Error while handling socket: {error}");
                         }
                     })

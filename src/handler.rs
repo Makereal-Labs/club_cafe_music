@@ -9,7 +9,7 @@ use crate::{AppState, Event};
 
 pub async fn handle(
     stream: TcpStream,
-    state: &'static Mutex<AppState>,
+    state: &Mutex<AppState>,
     event_recv: Receiver<Event>,
 ) -> anyhow::Result<()> {
     let websocket = accept_async(stream).await?;
