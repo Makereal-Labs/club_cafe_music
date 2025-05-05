@@ -80,6 +80,9 @@ function App() {
             setNowPlaying(null);
           }
           setRecv(queue);
+        } else if (body["msg"] == "snackbar") {
+          const msg = body["text"] as string;
+          display_snackbar(msg);
         }
       } catch {
         setRecv(recv.concat([event.data]));
