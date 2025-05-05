@@ -31,7 +31,7 @@ fn main() {
     let server = block_on(TcpListener::bind("0.0.0.0:9001")).unwrap();
 
     let ex = Executor::new();
-    let task = player(&state, broadcast_tx);
+    let task = player(&state, broadcast_tx.clone());
     let task = zip(task, async {
         let mut incoming = server.incoming();
         while let Some(stream) = incoming.next().await {
@@ -41,7 +41,7 @@ fn main() {
                     let _ = tx.send(Event).await;
                     event_listeners.lock().await.push(tx);
                     ex.spawn(async {
-                        if let Err(error) = handle(stream, &state, rx).await {
+                        if let Err(error) = handle(stream, &state, rx, broadcast_tx.clone()).await {
                             eprintln!("Error while handling socket: {error}");
                         }
                     })

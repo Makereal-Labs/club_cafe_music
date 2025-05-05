@@ -2,7 +2,7 @@ use async_tungstenite::accept_async;
 use async_tungstenite::tungstenite::Message;
 use futures::{SinkExt, StreamExt};
 use serde_json::json;
-use smol::{channel::Receiver, future::try_zip, lock::Mutex, net::TcpStream};
+use smol::{channel::Receiver, channel::Sender, future::try_zip, lock::Mutex, net::TcpStream};
 
 use crate::yt_dlp::{YoutubeInfo, get_ytdlp};
 use crate::{AppState, Event};
@@ -11,6 +11,7 @@ pub async fn handle(
     stream: TcpStream,
     state: &Mutex<AppState>,
     event_recv: Receiver<Event>,
+    broadcast_tx: Sender<Event>,
 ) -> anyhow::Result<()> {
     let websocket = accept_async(stream).await?;
 
@@ -97,6 +98,7 @@ pub async fn handle(
                     for info in list {
                         state.queue.push_back(info);
                     }
+                    let _ = broadcast_tx.send(Event).await;
                 }
             }
         }
