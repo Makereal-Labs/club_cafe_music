@@ -1,14 +1,13 @@
 use std::mem::forget;
 use std::time::Duration;
 
-use async_std::sync::Mutex;
-use async_std::{channel, task::sleep};
 use reqwest::blocking::Client;
 use rodio::Sink;
+use smol::{Timer, channel::Sender, lock::Mutex};
 
 use crate::{AppState, Event, decoder::decode, http_stream::HttpStream};
 
-pub async fn player(state: &Mutex<AppState>, broadcast_tx: channel::Sender<Event>) {
+pub async fn player(state: &Mutex<AppState>, broadcast_tx: Sender<Event>) {
     let (stream, stream_handle) = rodio::OutputStream::try_default().unwrap();
     forget(stream);
     let sink = Sink::try_new(&stream_handle).unwrap();
@@ -65,9 +64,9 @@ pub async fn player(state: &Mutex<AppState>, broadcast_tx: channel::Sender<Event
 
             sink.append(source);
             while !sink.empty() {
-                sleep(Duration::from_millis(100)).await;
+                Timer::after(Duration::from_millis(100)).await;
             }
         }
-        sleep(Duration::from_millis(200)).await;
+        Timer::after(Duration::from_millis(200)).await;
     }
 }

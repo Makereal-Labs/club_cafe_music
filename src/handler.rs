@@ -1,11 +1,9 @@
-use async_std::channel::Receiver;
-use async_std::net::TcpStream;
-use async_std::sync::Mutex;
 use async_tungstenite::accept_async;
 use async_tungstenite::tungstenite::Message;
 use future::join;
 use futures::prelude::*;
 use serde_json::json;
+use smol::{channel::Receiver, lock::Mutex, net::TcpStream};
 
 use crate::yt_dlp::{YoutubeInfo, get_ytdlp};
 use crate::{AppState, Event};

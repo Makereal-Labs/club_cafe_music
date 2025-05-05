@@ -7,10 +7,8 @@ mod yt_dlp;
 
 use std::collections::VecDeque;
 
-use async_std::net::TcpListener;
-use async_std::sync::Mutex;
-use async_std::task;
-use async_std::{channel, prelude::*};
+use smol::prelude::*;
+use smol::{Executor, block_on, channel, lock::Mutex, net::TcpListener};
 
 use handler::handle;
 use player::player;
@@ -30,15 +28,16 @@ fn main() {
     let event_listeners = Mutex::new(Vec::new());
     let (broadcast_tx, broadcast_rx) = channel::unbounded::<Event>();
 
-    let server = task::block_on(TcpListener::bind("0.0.0.0:9001")).unwrap();
+    let server = block_on(TcpListener::bind("0.0.0.0:9001")).unwrap();
 
     std::thread::scope(|s| {
         s.spawn(move || {
-            task::block_on(player(state, broadcast_tx));
+            block_on(player(state, broadcast_tx));
         });
         let ref_event_listeners = &event_listeners;
         s.spawn(|| {
-            task::block_on(async {
+            let ex = Executor::new();
+            block_on(ex.run(async {
                 let mut incoming = server.incoming();
                 while let Some(stream) = incoming.next().await {
                     match stream {
@@ -46,22 +45,23 @@ fn main() {
                             let (tx, rx) = channel::unbounded();
                             let _ = tx.send(Event).await;
                             ref_event_listeners.lock().await.push(tx);
-                            task::spawn(async move {
+                            ex.spawn(async move {
                                 if let Err(error) = handle(stream, state, rx).await {
                                     eprintln!("Error while handling socket: {error}");
                                 }
-                            });
+                            })
+                            .detach();
                         }
                         Err(error) => {
                             eprintln!("Error listening socket: {error}");
                         }
                     }
                 }
-            });
+            }));
         });
         let ref_event_listeners = &event_listeners;
         s.spawn(move || {
-            task::block_on(async {
+            block_on(async {
                 while let Ok(event) = broadcast_rx.recv().await {
                     for listener in ref_event_listeners.lock().await.iter() {
                         let _ = listener.send(event).await;
