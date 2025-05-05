@@ -2,7 +2,7 @@ use async_tungstenite::accept_async;
 use async_tungstenite::tungstenite::Message;
 use futures::{SinkExt, StreamExt};
 use serde_json::json;
-use smol::{channel::Receiver, future::zip, lock::Mutex, net::TcpStream};
+use smol::{channel::Receiver, future::try_zip, lock::Mutex, net::TcpStream};
 
 use crate::yt_dlp::{YoutubeInfo, get_ytdlp};
 use crate::{AppState, Event};
@@ -84,9 +84,7 @@ pub async fn handle(
         Ok::<(), anyhow::Error>(())
     };
 
-    let (result1, result2) = zip(task1, task2).await;
-    result1?;
-    result2?;
+    try_zip(task1, task2).await?;
 
     Ok(())
 }
