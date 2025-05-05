@@ -45,7 +45,10 @@ pub fn decode(source: Box<dyn MediaSource>) -> Result<DecodeSource, SymphoniaErr
     let track_id = audio_track.id;
     let codec_params = audio_track.codec_params.clone();
     let codec_descriptor = CODEC.get_codec(codec_params.codec).unwrap();
-    println!("Codec: {} ({})", codec_descriptor.short_name, codec_descriptor.long_name);
+    println!(
+        "Codec: {} ({})",
+        codec_descriptor.short_name, codec_descriptor.long_name
+    );
     DecodeSource::new(format, codec_params, track_id)
 }
 
