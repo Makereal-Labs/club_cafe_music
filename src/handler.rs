@@ -14,9 +14,20 @@ pub async fn handle(
 ) -> anyhow::Result<()> {
     let websocket = accept_async(stream).await?;
 
-    let (mut writer, mut reader) = websocket.split();
+    let (writer, mut reader) = websocket.split();
 
-    let task1 = async move {
+    let writer = Mutex::new(writer);
+
+    let send_snackbar = async |msg: &str| -> anyhow::Result<()> {
+        let msg = serde_json::to_string(&json!({
+            "msg": "snackbar",
+            "text": msg,
+        }))?;
+        writer.lock().await.send(Message::Text(msg.into())).await?;
+        Ok(())
+    };
+
+    let task1 = async {
         while let Ok(_event) = event_recv.recv().await {
             let msg = {
                 let state = state.lock().await;
@@ -32,12 +43,12 @@ pub async fn handle(
                     "queue": queue,
                 }))?
             };
-            writer.send(Message::Text(msg.into())).await?;
+            writer.lock().await.send(Message::Text(msg.into())).await?;
         }
         Ok::<(), anyhow::Error>(())
     };
 
-    let task2 = async move {
+    let task2 = async {
         loop {
             let msg = match reader.next().await {
                 Some(msg) => msg?,
@@ -71,10 +82,18 @@ pub async fn handle(
                 }
             };
 
+            send_snackbar("Request received! Please wait...").await?;
+
             if msg == "yt" {
                 if let Some(String(link)) = obj.get("link") {
                     let list = get_ytdlp(link).unwrap();
                     let mut state = state.lock().await;
+                    let snackbar_msg = if list.len() == 1 {
+                        "Song added to queue!".to_string()
+                    } else {
+                        format!("Playlist (len = {}) added to queue!", list.len())
+                    };
+                    send_snackbar(&snackbar_msg).await?;
                     for info in list {
                         state.queue.push_back(info);
                     }
