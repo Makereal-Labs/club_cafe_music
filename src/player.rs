@@ -1,14 +1,14 @@
 use std::mem::forget;
-use std::sync::{Mutex, mpsc};
-use std::thread::sleep;
 use std::time::Duration;
 
+use async_std::sync::Mutex;
+use async_std::{channel, task::sleep};
 use reqwest::blocking::Client;
 use rodio::Sink;
 
 use crate::{AppState, Event, decoder::decode, http_stream::HttpStream};
 
-pub fn player(state: &Mutex<AppState>, broadcast_tx: mpsc::Sender<Event>) {
+pub async fn player(state: &Mutex<AppState>, broadcast_tx: channel::Sender<Event>) {
     let (stream, stream_handle) = rodio::OutputStream::try_default().unwrap();
     forget(stream);
     let sink = Sink::try_new(&stream_handle).unwrap();
@@ -17,14 +17,14 @@ pub fn player(state: &Mutex<AppState>, broadcast_tx: mpsc::Sender<Event>) {
     let mut queue_was_not_empty = true;
     loop {
         let info = {
-            let mut state = state.lock().unwrap();
+            let mut state = state.lock().await;
             let info = state.queue.pop_front();
             state.now_playing = info.clone();
             info
         };
 
         if queue_was_not_empty || info.is_some() {
-            let _ = broadcast_tx.send(Event);
+            let _ = broadcast_tx.send(Event).await;
         }
 
         queue_was_not_empty = info.is_some();
@@ -64,8 +64,10 @@ pub fn player(state: &Mutex<AppState>, broadcast_tx: mpsc::Sender<Event>) {
             };
 
             sink.append(source);
-            sink.sleep_until_end();
+            while !sink.empty() {
+                sleep(Duration::from_millis(100)).await;
+            }
         }
-        sleep(Duration::from_millis(200));
+        sleep(Duration::from_millis(200)).await;
     }
 }

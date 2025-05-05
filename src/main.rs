@@ -6,9 +6,11 @@ mod player;
 mod yt_dlp;
 
 use std::collections::VecDeque;
-use std::io;
-use std::net::TcpListener;
-use std::sync::{Mutex, mpsc};
+
+use async_std::net::TcpListener;
+use async_std::sync::Mutex;
+use async_std::task;
+use async_std::{channel, prelude::*};
 
 use handler::handle;
 use player::player;
@@ -24,55 +26,48 @@ struct AppState {
 struct Event;
 
 fn main() {
-    let state: Mutex<AppState> = Mutex::new(AppState::default());
+    let state: &_ = Box::leak(Box::new(Mutex::new(AppState::default())));
     let event_listeners = Mutex::new(Vec::new());
-    let (broadcast_tx, broadcast_rx) = mpsc::channel::<Event>();
+    let (broadcast_tx, broadcast_rx) = channel::unbounded::<Event>();
 
-    let server = TcpListener::bind("0.0.0.0:9001").unwrap();
-    server
-        .set_nonblocking(true)
-        .expect("Cannot set non-blocking");
+    let server = task::block_on(TcpListener::bind("0.0.0.0:9001")).unwrap();
 
     std::thread::scope(|s| {
-        let ref_broadcast_tx = broadcast_tx.clone();
-        let ref_state = &state;
         s.spawn(move || {
-            player(ref_state, ref_broadcast_tx);
+            task::block_on(player(state, broadcast_tx));
         });
-        let ref_state = &state;
         let ref_event_listeners = &event_listeners;
-        s.spawn(move || {
-            for stream in server.incoming() {
-                match stream {
-                    Ok(stream) => {
-                        if let Ok(()) = stream.set_nonblocking(true) {
-                            let (tx, rx) = mpsc::channel();
-                            let _ = tx.send(Event);
-                            ref_event_listeners.lock().unwrap().push(tx);
-                            s.spawn(move || {
-                                if let Err(error) = handle(stream, ref_state, rx) {
+        s.spawn(|| {
+            task::block_on(async {
+                let mut incoming = server.incoming();
+                while let Some(stream) = incoming.next().await {
+                    match stream {
+                        Ok(stream) => {
+                            let (tx, rx) = channel::unbounded();
+                            let _ = tx.send(Event).await;
+                            ref_event_listeners.lock().await.push(tx);
+                            task::spawn(async move {
+                                if let Err(error) = handle(stream, state, rx).await {
                                     eprintln!("Error while handling socket: {error}");
                                 }
                             });
-                        } else {
-                            eprintln!("set_nonblocking failed");
+                        }
+                        Err(error) => {
+                            eprintln!("Error listening socket: {error}");
                         }
                     }
-                    Err(ref error) if error.kind() == io::ErrorKind::WouldBlock => {}
-                    Err(error) => {
-                        eprintln!("Error listening socket: {error}");
-                    }
                 }
-            }
+            });
         });
         let ref_event_listeners = &event_listeners;
         s.spawn(move || {
-            while let Ok(event) = broadcast_rx.recv() {
-                ref_event_listeners
-                    .lock()
-                    .unwrap()
-                    .retain(|listener| listener.send(event).is_ok());
-            }
+            task::block_on(async {
+                while let Ok(event) = broadcast_rx.recv().await {
+                    for listener in ref_event_listeners.lock().await.iter() {
+                        let _ = listener.send(event).await;
+                    }
+                }
+            });
         });
     });
 }
