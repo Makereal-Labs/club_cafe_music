@@ -1,5 +1,5 @@
 use serde::Deserialize;
-use std::process::{Command, Stdio};
+use smol::process::{Command, Stdio};
 
 #[allow(unused)]
 #[derive(Debug, Clone, Deserialize)]
@@ -28,7 +28,7 @@ pub struct MediaFormat {
     pub url: String,
 }
 
-pub fn get_ytdlp(url: &str) -> anyhow::Result<Vec<YoutubeInfo>> {
+pub async fn get_ytdlp(url: &str) -> anyhow::Result<Vec<YoutubeInfo>> {
     if matches!(url.chars().next(), None | Some('-')) {
         return Err(anyhow::anyhow!("Invalid URL :{}", url));
     }
@@ -42,7 +42,8 @@ pub fn get_ytdlp(url: &str) -> anyhow::Result<Vec<YoutubeInfo>> {
         .stdout(Stdio::piped())
         .stderr(Stdio::null())
         .spawn()?
-        .wait_with_output()?;
+        .output()
+        .await?;
 
     if !output.status.success() {
         return Err(anyhow::anyhow!("Call to yt-dlp failed: {}", output.status));

@@ -87,7 +87,7 @@ pub async fn handle(
 
             if msg == "yt" {
                 if let Some(String(link)) = obj.get("link") {
-                    let list = get_ytdlp(link).unwrap();
+                    let list = get_ytdlp(link).await.unwrap();
                     let mut state = state.lock().await;
                     let snackbar_msg = if list.len() == 1 {
                         "Song added to queue!".to_string()
