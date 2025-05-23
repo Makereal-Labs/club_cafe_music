@@ -1,6 +1,7 @@
 use std::mem::forget;
 use std::time::Duration;
 
+use log::error;
 use reqwest::blocking::Client;
 use rodio::Sink;
 use smol::{Timer, channel::Sender, lock::Mutex};
@@ -41,7 +42,7 @@ pub async fn player(state: &Mutex<AppState>, broadcast_tx: Sender<Event>) {
             let format = match format {
                 Some(format) => format,
                 None => {
-                    eprintln!("No usable format when playing id: {}", info.id);
+                    error!("No usable format when playing id: {}", info.id);
                     continue;
                 }
             };
@@ -49,7 +50,7 @@ pub async fn player(state: &Mutex<AppState>, broadcast_tx: Sender<Event>) {
             let http_stream = match HttpStream::new(client.clone(), &format.url) {
                 Ok(http_stream) => http_stream,
                 Err(err) => {
-                    eprintln!("Fetch url failed: {}", err);
+                    error!("Fetch url failed: {}", err);
                     continue;
                 }
             };
@@ -57,7 +58,7 @@ pub async fn player(state: &Mutex<AppState>, broadcast_tx: Sender<Event>) {
             let source = match decode(Box::new(http_stream)) {
                 Ok(source) => source,
                 Err(err) => {
-                    eprintln!("Audio decode failed: {}", err);
+                    error!("Audio decode failed: {}", err);
                     continue;
                 }
             };

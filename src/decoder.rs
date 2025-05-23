@@ -14,6 +14,8 @@ use symphonia::{
     default::register_enabled_codecs,
 };
 
+use log::{error, info};
+
 use crate::opus_decoder::OPUS_CODEC_DESCRIPTOR;
 
 static CODEC: LazyLock<CodecRegistry> = LazyLock::new(|| {
@@ -45,8 +47,8 @@ pub fn decode(source: Box<dyn MediaSource>) -> Result<DecodeSource, SymphoniaErr
     let track_id = audio_track.id;
     let codec_params = audio_track.codec_params.clone();
     let codec_descriptor = CODEC.get_codec(codec_params.codec).unwrap();
-    println!(
-        "Codec: {} ({})",
+    info!(
+        "Audio Codec: {} ({})",
         codec_descriptor.short_name, codec_descriptor.long_name
     );
     DecodeSource::new(format, codec_params, track_id)
@@ -93,7 +95,7 @@ impl Iterator for DecodeSource {
             let decoded = match self.decoder.decode(&packet) {
                 Ok(decoded) => decoded,
                 Err(SymphoniaError::DecodeError(err)) => {
-                    println!("DecodeError: {}", err);
+                    error!("DecodeError: {}", err);
                     continue;
                 }
                 Err(_) => {
