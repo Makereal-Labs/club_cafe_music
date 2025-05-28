@@ -1,17 +1,18 @@
 use async_tungstenite::accept_async;
 use async_tungstenite::tungstenite::Message;
 use futures::{SinkExt, StreamExt};
+use log::warn;
 use serde_json::json;
 use smol::{channel::Receiver, channel::Sender, future::try_zip, lock::Mutex, net::TcpStream};
 
 use crate::yt_dlp::{YoutubeInfo, get_ytdlp};
-use crate::{AppState, Event};
+use crate::{AppState, Event, HandlerEvent};
 
 pub async fn handle(
     stream: TcpStream,
     state: &Mutex<AppState>,
     event_recv: Receiver<Event>,
-    broadcast_tx: Sender<Event>,
+    handler_event_tx: Sender<HandlerEvent>,
 ) -> anyhow::Result<()> {
     let websocket = accept_async(stream).await?;
 
@@ -83,22 +84,44 @@ pub async fn handle(
                 }
             };
 
-            send_snackbar("Request received! Please wait...").await?;
+            match msg.as_str() {
+                "yt" => {
+                    send_snackbar("Request received! Please wait...").await?;
 
-            if msg == "yt" {
-                if let Some(String(link)) = obj.get("link") {
-                    let list = get_ytdlp(link).await.unwrap();
-                    let mut state = state.lock().await;
-                    let snackbar_msg = if list.len() == 1 {
-                        "Song added to queue!".to_string()
-                    } else {
-                        format!("Playlist (len = {}) added to queue!", list.len())
-                    };
-                    send_snackbar(&snackbar_msg).await?;
-                    for info in list {
-                        state.queue.push_back(info);
+                    if let Some(String(link)) = obj.get("link") {
+                        let list = get_ytdlp(link).await.unwrap();
+                        let mut state = state.lock().await;
+                        let snackbar_msg = if list.len() == 1 {
+                            "Song added to queue!".to_string()
+                        } else {
+                            format!("Playlist (len = {}) added to queue!", list.len())
+                        };
+                        send_snackbar(&snackbar_msg).await?;
+                        for info in list {
+                            state.queue.push_back(info);
+                        }
+                        let _ = handler_event_tx.send(HandlerEvent::StateUpdate).await;
                     }
-                    let _ = broadcast_tx.send(Event).await;
+                }
+                "btn" => {
+                    if let Some(String(action)) = obj.get("action") {
+                        match action.as_str() {
+                            "pause" => {
+                                let _ = handler_event_tx.send(HandlerEvent::Pause).await;
+                            }
+                            "resume" => {
+                                let _ = handler_event_tx.send(HandlerEvent::Resume).await;
+                            }
+                            _ => {
+                                warn!("Unknown client message: msg = btn, action = {action}");
+                            }
+                        }
+                    } else {
+                        warn!("Malformed client message: msg = btn, action not found");
+                    }
+                }
+                _ => {
+                    warn!("Unknown client message: msg = {msg}");
                 }
             }
         }
