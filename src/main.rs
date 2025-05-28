@@ -25,7 +25,7 @@ struct AppState {
     player: PlayerState,
 }
 
-#[derive(Debug, Default)]
+#[derive(Debug)]
 struct PlayerState {
     playing: bool,
 }
@@ -47,6 +47,12 @@ enum HandlerEvent {
 enum PlayerEvent {
     Pause,
     Resume,
+}
+
+impl Default for PlayerState {
+    fn default() -> Self {
+        PlayerState { playing: true }
+    }
 }
 
 fn main() {
