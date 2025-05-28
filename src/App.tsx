@@ -83,6 +83,9 @@ function App() {
             setNowPlaying(null);
           }
           setRecv(queue);
+        } else if (body["msg"] == "player") {
+          const playing = body["playing"] as boolean;
+          setPlaying(playing)
         } else if (body["msg"] == "snackbar") {
           const msg = body["text"] as string;
           display_snackbar(msg);
