@@ -6,12 +6,12 @@ use serde_json::json;
 use smol::{channel::Receiver, channel::Sender, future::try_zip, lock::Mutex, net::TcpStream};
 
 use crate::yt_dlp::{YoutubeInfo, get_ytdlp};
-use crate::{AppState, Event, HandlerEvent};
+use crate::{AppState, BroadcastEvent, HandlerEvent};
 
 pub async fn handle(
     stream: TcpStream,
     state: &Mutex<AppState>,
-    event_recv: Receiver<Event>,
+    event_recv: Receiver<BroadcastEvent>,
     handler_event_tx: Sender<HandlerEvent>,
 ) -> anyhow::Result<()> {
     let websocket = accept_async(stream).await?;
@@ -30,21 +30,31 @@ pub async fn handle(
     };
 
     let task1 = async {
-        while let Ok(_event) = event_recv.recv().await {
-            let msg = {
-                let state = state.lock().await;
-                let to_json = |info: &YoutubeInfo| {
-                    let url = format!("https://www.youtube.com/watch?v={}", info.id);
-                    json!({"title": info.title, "url": url, "time": info.duration})
-                };
-                let now_playing = state.now_playing.as_ref().map(to_json);
-                let queue = state.queue.iter().map(to_json).collect::<Vec<_>>();
-                serde_json::to_string(&json!({
-                    "msg": "queue",
-                    "now_playing": now_playing,
-                    "queue": queue,
-                }))?
+        while let Ok(broadcast_event) = event_recv.recv().await {
+            let msg = match broadcast_event {
+                BroadcastEvent::UpdateQueue => {
+                    let state = state.lock().await;
+                    let to_json = |info: &YoutubeInfo| {
+                        let url = format!("https://www.youtube.com/watch?v={}", info.id);
+                        json!({"title": info.title, "url": url, "time": info.duration})
+                    };
+                    let now_playing = state.now_playing.as_ref().map(to_json);
+                    let queue = state.queue.iter().map(to_json).collect::<Vec<_>>();
+                    json!({
+                        "msg": "queue",
+                        "now_playing": now_playing,
+                        "queue": queue,
+                    })
+                }
+                BroadcastEvent::UpdatePlayer => {
+                    let state = state.lock().await;
+                    json!({
+                        "msg": "player",
+                        "playing": state.player.playing,
+                    })
+                }
             };
+            let msg = serde_json::to_string(&msg)?;
             writer.lock().await.send(Message::Text(msg.into())).await?;
         }
         Ok::<(), anyhow::Error>(())
@@ -100,7 +110,7 @@ pub async fn handle(
                         for info in list {
                             state.queue.push_back(info);
                         }
-                        let _ = handler_event_tx.send(HandlerEvent::StateUpdate).await;
+                        let _ = handler_event_tx.send(HandlerEvent::UpdateQueue).await;
                     }
                 }
                 "btn" => {

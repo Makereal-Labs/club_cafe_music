@@ -22,14 +22,23 @@ use yt_dlp::YoutubeInfo;
 struct AppState {
     now_playing: Option<YoutubeInfo>,
     queue: VecDeque<YoutubeInfo>,
+    player: PlayerState,
+}
+
+#[derive(Debug, Default)]
+struct PlayerState {
+    playing: bool,
 }
 
 #[derive(Debug, Clone, Copy)]
-struct Event;
+enum BroadcastEvent {
+    UpdateQueue,
+    UpdatePlayer,
+}
 
 #[derive(Debug, Clone, Copy)]
 enum HandlerEvent {
-    StateUpdate,
+    UpdateQueue,
     Pause,
     Resume,
 }
@@ -56,7 +65,7 @@ fn main() {
 
     let state = Mutex::new(AppState::default());
     let event_listeners = Mutex::new(Vec::new());
-    let (broadcast_tx, broadcast_rx) = channel::unbounded::<Event>();
+    let (broadcast_tx, broadcast_rx) = channel::unbounded::<BroadcastEvent>();
     let (handler_event_tx, handler_event_rx) = channel::unbounded::<HandlerEvent>();
     let (player_event_tx, player_event_rx) = channel::unbounded::<PlayerEvent>();
 
@@ -70,7 +79,8 @@ fn main() {
             match stream {
                 Ok(stream) => {
                     let (tx, rx) = channel::unbounded();
-                    let _ = tx.send(Event).await;
+                    let _ = tx.send(BroadcastEvent::UpdatePlayer).await;
+                    let _ = tx.send(BroadcastEvent::UpdateQueue).await;
                     event_listeners.lock().await.push(tx);
                     ex.spawn(async {
                         if let Err(error) =
@@ -97,14 +107,18 @@ fn main() {
     let task = zip(task, async {
         while let Ok(event) = handler_event_rx.recv().await {
             match event {
-                HandlerEvent::StateUpdate => {
-                    let _ = broadcast_tx.send(Event).await;
+                HandlerEvent::UpdateQueue => {
+                    let _ = broadcast_tx.send(BroadcastEvent::UpdateQueue).await;
                 }
                 HandlerEvent::Pause => {
+                    state.lock().await.player.playing = false;
                     let _ = player_event_tx.send(PlayerEvent::Pause).await;
+                    let _ = broadcast_tx.send(BroadcastEvent::UpdatePlayer).await;
                 }
                 HandlerEvent::Resume => {
+                    state.lock().await.player.playing = true;
                     let _ = player_event_tx.send(PlayerEvent::Resume).await;
+                    let _ = broadcast_tx.send(BroadcastEvent::UpdatePlayer).await;
                 }
             }
         }

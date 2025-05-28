@@ -11,12 +11,12 @@ use smol::{
     lock::Mutex,
 };
 
-use crate::{AppState, Event, PlayerEvent, decoder::decode, http_stream::HttpStream};
+use crate::{AppState, BroadcastEvent, PlayerEvent, decoder::decode, http_stream::HttpStream};
 
 pub async fn player(
     state: &Mutex<AppState>,
     player_event_rx: Receiver<PlayerEvent>,
-    broadcast_tx: Sender<Event>,
+    broadcast_tx: Sender<BroadcastEvent>,
 ) {
     let (stream, stream_handle) = rodio::OutputStream::try_default().unwrap();
     forget(stream);
@@ -47,7 +47,7 @@ pub async fn player(
             };
 
             if queue_was_not_empty || info.is_some() {
-                let _ = broadcast_tx.send(Event).await;
+                let _ = broadcast_tx.send(BroadcastEvent::UpdateQueue).await;
             }
 
             queue_was_not_empty = info.is_some();
