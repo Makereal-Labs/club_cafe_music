@@ -7,7 +7,7 @@ mod yt_dlp;
 
 use std::collections::VecDeque;
 
-use simplelog::{ColorChoice, Config, TermLogger, TerminalMode};
+use simplelog::{ColorChoice, ConfigBuilder, TermLogger, TerminalMode};
 use smol::prelude::*;
 use smol::{Executor, block_on, channel, future::zip, lock::Mutex, net::TcpListener};
 
@@ -59,9 +59,14 @@ fn main() {
     if connected_to_journal() {
         JournalLog::new().unwrap().install().unwrap();
     } else {
+        let config = ConfigBuilder::new()
+            .set_time_format_rfc2822()
+            .set_time_offset_to_local()
+            .unwrap()
+            .build();
         TermLogger::init(
             LevelFilter::Trace,
-            Config::default(),
+            config,
             TerminalMode::Mixed,
             ColorChoice::Auto,
         )
