@@ -55,6 +55,9 @@ function copyToClipboard(textToCopy: string) {
 
 function App() {
   const [theme, setTheme] = useState(ThemeId.Dark);
+  // player
+  const [playing, setPlaying] = useState(false);
+  // queue
   const [now_playing, setNowPlaying] = useState<ListEntry | null>(null);
   const [recv, setRecv] = useState<Array<ListEntry>>([]);
   const [yt_link, setYtLink] = useState("");
@@ -114,6 +117,19 @@ function App() {
     setSnackbarKey(new Date().getTime());
   }
 
+  function on_player_button(action: string) {
+    if (action == "pause") {
+      setPlaying(false);
+    } else if (action == "resume") {
+      setPlaying(true);
+    }
+    const msg = {
+      msg: "btn",
+      action: action,
+    };
+    session.send(JSON.stringify(msg));
+  }
+
   function gen_queue_entry(item: ListEntry) {
     let time = null;
     if (item.time) {
@@ -163,7 +179,10 @@ function App() {
         </AppBar>
         <Container>
           <Toolbar />
-          <Player />
+          <Player
+            playing={playing}
+            onButton={on_player_button}
+          />
           <form onSubmit={event => { event.preventDefault(); on_yt_submit(); }}>
             <TextField
               fullWidth

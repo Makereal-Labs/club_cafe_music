@@ -21,9 +21,13 @@ function format_time(time: number): string {
     + `${Math.floor(time) % 60}`.padStart(2, "0");
 }
 
-function Player() {
+type PlayerProps = {
+  playing: boolean,
+  onButton: (action: string) => void,
+};
+
+function Player(props: PlayerProps) {
   const theme = useTheme();
-  const [playing, setPlaying] = useState(false);
   const [play_time, setPlayTime] = useState(0);
   const total_time = 180;
 
@@ -59,12 +63,12 @@ function Player() {
         <IconButton>
           <FastRewindRounded fontSize="large" />
         </IconButton>
-        <IconButton onClick={() => { setPlaying(!playing); }}>
+        <IconButton onClick={() => { props.onButton(props.playing ? "pause" : "resume"); }}>
           {
-            playing ? (
-              <PlayArrowRounded fontSize="large" />
-            ) : (
+            props.playing ? (
               <PauseRounded fontSize="large" />
+            ) : (
+              <PlayArrowRounded fontSize="large" />
             )
           }
         </IconButton>
