@@ -1,7 +1,7 @@
 use std::mem::forget;
 use std::time::Duration;
 
-use log::error;
+use log::{error, info};
 use reqwest::blocking::Client;
 use rodio::Sink;
 use smol::{
@@ -53,6 +53,8 @@ pub async fn player(
             queue_was_not_empty = info.is_some();
 
             if let Some(info) = info {
+                info!("Start playing song (id: {})", info.id);
+
                 let format = info
                     .formats
                     .iter()
@@ -90,6 +92,7 @@ pub async fn player(
                 while !sink.empty() {
                     Timer::after(Duration::from_millis(100)).await;
                 }
+                info!("Finished playing song");
             }
             Timer::after(Duration::from_millis(200)).await;
         }

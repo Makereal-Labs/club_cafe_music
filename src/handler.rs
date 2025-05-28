@@ -1,7 +1,7 @@
 use async_tungstenite::accept_async;
 use async_tungstenite::tungstenite::Message;
 use futures::{SinkExt, StreamExt};
-use log::warn;
+use log::{info, warn};
 use serde_json::json;
 use smol::{channel::Receiver, channel::Sender, future::try_zip, lock::Mutex, net::TcpStream};
 
@@ -102,8 +102,10 @@ pub async fn handle(
                         let list = get_ytdlp(link).await.unwrap();
                         let mut state = state.lock().await;
                         let snackbar_msg = if list.len() == 1 {
+                            info!("Song added to queue (id: {})", list[0].id);
                             "Song added to queue!".to_string()
                         } else {
+                            info!("Playlist added to queue (len: {})", list.len());
                             format!("Playlist (len = {}) added to queue!", list.len())
                         };
                         send_snackbar(&snackbar_msg).await?;
