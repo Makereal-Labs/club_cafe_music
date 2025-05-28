@@ -31,7 +31,7 @@ impl HttpStream {
                         .get(&url)
                         .header("Range", format!("bytes={}-{}", progress, chunk_end - 1))
                         .send()
-                        .map_err(|err| io::Error::new(io::ErrorKind::Other, Box::new(err)));
+                        .map_err(|err| io::Error::other(Box::new(err)));
                     let response = match response {
                         Ok(response) => response,
                         Err(error) => {
@@ -41,7 +41,7 @@ impl HttpStream {
                     };
                     let bytes = response
                         .bytes()
-                        .map_err(|err| io::Error::new(io::ErrorKind::Other, Box::new(err)));
+                        .map_err(|err| io::Error::other(Box::new(err)));
                     let bytes = match bytes {
                         Ok(bytes) => bytes,
                         Err(error) => {
