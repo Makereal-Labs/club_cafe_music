@@ -72,7 +72,7 @@ function Player(props: PlayerProps) {
             )
           }
         </IconButton>
-        <IconButton>
+        <IconButton onClick={() => { props.onButton("skip"); }}>
           <FastForwardRounded fontSize="large" />
         </IconButton>
       </Box>
