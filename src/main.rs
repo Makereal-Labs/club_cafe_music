@@ -41,12 +41,14 @@ enum HandlerEvent {
     UpdateQueue,
     Pause,
     Resume,
+    Skip,
 }
 
 #[derive(Debug, Clone, Copy)]
 enum PlayerEvent {
     Pause,
     Resume,
+    Skip,
 }
 
 impl Default for PlayerState {
@@ -130,6 +132,9 @@ fn main() {
                     state.lock().await.player.playing = true;
                     let _ = player_event_tx.send(PlayerEvent::Resume).await;
                     let _ = broadcast_tx.send(BroadcastEvent::UpdatePlayer).await;
+                }
+                HandlerEvent::Skip => {
+                    let _ = player_event_tx.send(PlayerEvent::Skip).await;
                 }
             }
         }

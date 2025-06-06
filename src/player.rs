@@ -32,6 +32,9 @@ pub async fn player(
                 PlayerEvent::Resume => {
                     sink.play();
                 }
+                PlayerEvent::Skip => {
+                    sink.skip_one();
+                }
             }
         }
     };

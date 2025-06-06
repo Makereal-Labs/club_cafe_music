@@ -124,6 +124,9 @@ pub async fn handle(
                             "resume" => {
                                 let _ = handler_event_tx.send(HandlerEvent::Resume).await;
                             }
+                            "skip" => {
+                                let _ = handler_event_tx.send(HandlerEvent::Skip).await;
+                            }
                             _ => {
                                 warn!("Unknown client message: msg = btn, action = {action}");
                             }
