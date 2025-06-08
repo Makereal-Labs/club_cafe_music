@@ -17,8 +17,8 @@ pub enum QueueEntry {
 
 #[derive(Debug)]
 pub struct FetchTask {
-    pub url: String,
-    pub task: Task<anyhow::Result<Vec<YoutubeInfo>>>,
+    url: String,
+    task: Task<anyhow::Result<Vec<YoutubeInfo>>>,
 }
 
 impl SongQueue {
@@ -44,5 +44,15 @@ impl SongQueue {
 
     pub fn iter(&self) -> impl Iterator<Item = &QueueEntry> {
         self.queue.iter()
+    }
+}
+
+impl FetchTask {
+    pub fn new(task: Task<anyhow::Result<Vec<YoutubeInfo>>>, url: String) -> Self {
+        FetchTask { task, url }
+    }
+
+    pub fn url(&self) -> &str {
+        &self.url
     }
 }

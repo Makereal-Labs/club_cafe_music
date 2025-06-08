@@ -43,7 +43,7 @@ pub async fn handle(
                     let entry_to_json = |entry: &QueueEntry| match entry {
                         QueueEntry::Fetched(info) => info_to_json(info),
                         QueueEntry::Fetching(task) => {
-                            json!({"fetched": false, "url": task.url})
+                            json!({"fetched": false, "url": task.url()})
                         }
                     };
                     let now_playing = state.now_playing.as_ref().map(info_to_json);
@@ -112,7 +112,7 @@ pub async fn handle(
                         let mut state = state.lock().await;
                         state
                             .queue
-                            .push(QueueEntry::Fetching(FetchTask { task, url }));
+                            .push(QueueEntry::Fetching(FetchTask::new(task, url)));
                         let _ = handler_event_tx.send(HandlerEvent::UpdateQueue).await;
                     }
                 }
