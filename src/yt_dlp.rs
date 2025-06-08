@@ -28,7 +28,7 @@ pub struct MediaFormat {
     pub url: String,
 }
 
-pub async fn get_ytdlp(url: &str) -> anyhow::Result<Vec<YoutubeInfo>> {
+pub async fn get_ytdlp(url: String) -> anyhow::Result<Vec<YoutubeInfo>> {
     if matches!(url.chars().next(), None | Some('-')) {
         return Err(anyhow::anyhow!("Invalid URL :{}", url));
     }

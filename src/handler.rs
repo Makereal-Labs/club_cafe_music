@@ -3,8 +3,10 @@ use async_tungstenite::tungstenite::Message;
 use futures::{SinkExt, StreamExt};
 use log::{info, warn};
 use serde_json::json;
+use smol::spawn;
 use smol::{channel::Receiver, channel::Sender, future::try_zip, lock::Mutex, net::TcpStream};
 
+use crate::song_queue::{FetchTask, QueueEntry};
 use crate::yt_dlp::{YoutubeInfo, get_ytdlp};
 use crate::{AppState, BroadcastEvent, HandlerEvent};
 
@@ -34,12 +36,18 @@ pub async fn handle(
             let msg = match broadcast_event {
                 BroadcastEvent::UpdateQueue => {
                     let state = state.lock().await;
-                    let to_json = |info: &YoutubeInfo| {
+                    let info_to_json = |info: &YoutubeInfo| {
                         let url = format!("https://www.youtube.com/watch?v={}", info.id);
-                        json!({"title": info.title, "url": url, "time": info.duration})
+                        json!({"fetched": true, "title": info.title, "url": url, "time": info.duration})
                     };
-                    let now_playing = state.now_playing.as_ref().map(to_json);
-                    let queue = state.queue.iter().map(to_json).collect::<Vec<_>>();
+                    let entry_to_json = |entry: &QueueEntry| match entry {
+                        QueueEntry::Fetched(info) => info_to_json(info),
+                        QueueEntry::Fetching(task) => {
+                            json!({"fetched": false, "url": task.url})
+                        }
+                    };
+                    let now_playing = state.now_playing.as_ref().map(info_to_json);
+                    let queue = state.queue.iter().map(entry_to_json).collect::<Vec<_>>();
                     json!({
                         "msg": "queue",
                         "now_playing": now_playing,
@@ -97,21 +105,14 @@ pub async fn handle(
             match msg.as_str() {
                 "yt" => {
                     send_snackbar("Request received! Please wait...").await?;
-
                     if let Some(String(link)) = obj.get("link") {
-                        let list = get_ytdlp(link).await.unwrap();
+                        info!("Received link (url: {})", link);
+                        let url = link.clone();
+                        let task = spawn(get_ytdlp(link.clone()));
                         let mut state = state.lock().await;
-                        let snackbar_msg = if list.len() == 1 {
-                            info!("Song added to queue (id: {})", list[0].id);
-                            "Song added to queue!".to_string()
-                        } else {
-                            info!("Playlist added to queue (len: {})", list.len());
-                            format!("Playlist (len = {}) added to queue!", list.len())
-                        };
-                        send_snackbar(&snackbar_msg).await?;
-                        for info in list {
-                            state.queue.push_back(info);
-                        }
+                        state
+                            .queue
+                            .push(QueueEntry::Fetching(FetchTask { task, url }));
                         let _ = handler_event_tx.send(HandlerEvent::UpdateQueue).await;
                     }
                 }

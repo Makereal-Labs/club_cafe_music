@@ -3,9 +3,8 @@ mod handler;
 mod http_stream;
 mod opus_decoder;
 mod player;
+mod song_queue;
 mod yt_dlp;
-
-use std::collections::VecDeque;
 
 use simplelog::{ColorChoice, ConfigBuilder, TermLogger, TerminalMode};
 use smol::prelude::*;
@@ -16,12 +15,13 @@ use systemd_journal_logger::{JournalLog, connected_to_journal};
 
 use handler::handle;
 use player::player;
+use song_queue::SongQueue;
 use yt_dlp::YoutubeInfo;
 
 #[derive(Debug, Default)]
 struct AppState {
     now_playing: Option<YoutubeInfo>,
-    queue: VecDeque<YoutubeInfo>,
+    queue: SongQueue,
     player: PlayerState,
 }
 

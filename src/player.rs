@@ -44,7 +44,7 @@ pub async fn player(
         loop {
             let info = {
                 let mut state = state.lock().await;
-                let info = state.queue.pop_front();
+                let info = state.queue.wait_pop().await;
                 state.now_playing = info.clone();
                 info
             };
