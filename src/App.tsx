@@ -22,6 +22,7 @@ import { Link } from '@mui/icons-material';
 import CustomSnackbar from './CustomSnackbar.tsx';
 
 type ListEntry = {
+  fetched: boolean,
   title: string,
   url: string,
   time: number,
@@ -160,8 +161,8 @@ function App() {
         }
       >
         <ListItemText
-          primary={item.title}
-          secondary={time}
+          primary={item.fetched ? item.title : "Fetching..."}
+          secondary={item.fetched ? time : item.url}
         />
       </ListItem>
       <Divider />
