@@ -15,13 +15,13 @@ use systemd_journal_logger::{JournalLog, connected_to_journal};
 
 use handler::handle;
 use player::player;
-use song_queue::SongQueue;
+use song_queue::{SongQueue, process_queue};
 use yt_dlp::YoutubeInfo;
 
 #[derive(Debug, Default)]
-struct AppState {
+struct AppState<'ex> {
     now_playing: Option<YoutubeInfo>,
-    queue: SongQueue,
+    queue: SongQueue<'ex>,
     player: PlayerState,
 }
 
@@ -86,6 +86,7 @@ fn main() {
 
     let ex = Executor::new();
     let task = player(&state, player_event_rx, broadcast_tx.clone());
+    let task = zip(task, process_queue(&state, handler_event_tx.clone()));
     let task = zip(task, async {
         let mut incoming = server.incoming();
         while let Some(stream) = incoming.next().await {

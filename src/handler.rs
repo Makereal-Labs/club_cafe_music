@@ -3,16 +3,15 @@ use async_tungstenite::tungstenite::Message;
 use futures::{SinkExt, StreamExt};
 use log::{info, warn};
 use serde_json::json;
-use smol::spawn;
 use smol::{channel::Receiver, channel::Sender, future::try_zip, lock::Mutex, net::TcpStream};
 
-use crate::song_queue::{FetchTask, QueueEntry};
+use crate::song_queue::QueueEntry;
 use crate::yt_dlp::{YoutubeInfo, get_ytdlp};
 use crate::{AppState, BroadcastEvent, HandlerEvent};
 
 pub async fn handle(
     stream: TcpStream,
-    state: &Mutex<AppState>,
+    state: &Mutex<AppState<'_>>,
     event_recv: Receiver<BroadcastEvent>,
     handler_event_tx: Sender<HandlerEvent>,
 ) -> anyhow::Result<()> {
@@ -108,11 +107,8 @@ pub async fn handle(
                     if let Some(String(link)) = obj.get("link") {
                         info!("Received link (url: {})", link);
                         let url = link.clone();
-                        let task = spawn(get_ytdlp(link.clone()));
-                        let mut state = state.lock().await;
-                        state
-                            .queue
-                            .push(QueueEntry::Fetching(FetchTask::new(task, url)));
+                        let future = get_ytdlp(link.clone());
+                        state.lock().await.queue.push_task(future, url);
                         let _ = handler_event_tx.send(HandlerEvent::UpdateQueue).await;
                     }
                 }

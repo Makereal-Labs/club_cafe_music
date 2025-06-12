@@ -1,12 +1,14 @@
-use std::collections::VecDeque;
+use std::{collections::VecDeque, mem::take, time::Duration};
 
-use smol::Task;
+use futures::StreamExt;
+use smol::{Executor, Task, Timer, channel::Sender, lock::Mutex};
 
-use crate::yt_dlp::YoutubeInfo;
+use crate::{AppState, HandlerEvent, yt_dlp::YoutubeInfo};
 
 #[derive(Debug, Default)]
-pub struct SongQueue {
+pub struct SongQueue<'ex> {
     queue: VecDeque<QueueEntry>,
+    executor: Executor<'ex>,
 }
 
 #[derive(Debug)]
@@ -21,23 +23,62 @@ pub struct FetchTask {
     task: Task<anyhow::Result<Vec<YoutubeInfo>>>,
 }
 
-impl SongQueue {
-    pub fn push(&mut self, item: QueueEntry) {
-        self.queue.push_back(item);
+pub async fn process_queue(state: &Mutex<AppState<'_>>, handler_event_tx: Sender<HandlerEvent>) {
+    const PERIOD: Duration = Duration::from_millis(100);
+    let mut timer = Timer::interval(PERIOD);
+    loop {
+        let mut queue_changed = false;
+        {
+            let mut state = state.lock().await;
+            if state.queue.executor.try_tick() {
+                let old_queue = take(&mut state.queue.queue);
+                for entry in old_queue {
+                    match entry {
+                        QueueEntry::Fetched(info) => {
+                            state.queue.queue.push_back(QueueEntry::Fetched(info));
+                        }
+                        QueueEntry::Fetching(task) => {
+                            if task.task.is_finished() {
+                                queue_changed = true;
+                                let list = task.task.await.unwrap();
+                                for info in list {
+                                    state.queue.queue.push_back(QueueEntry::Fetched(info));
+                                }
+                            } else {
+                                state.queue.queue.push_back(QueueEntry::Fetching(task));
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        if queue_changed {
+            let _ = handler_event_tx.send(HandlerEvent::UpdateQueue).await;
+        }
+        timer.next().await;
+    }
+}
+
+impl<'ex> SongQueue<'ex> {
+    pub fn push_task(
+        &mut self,
+        future: impl Future<Output = anyhow::Result<Vec<YoutubeInfo>>> + Send + 'ex,
+        url: String,
+    ) {
+        let task = self.executor.spawn(future);
+        let task = FetchTask { task, url };
+        self.queue.push_back(QueueEntry::Fetching(task));
     }
 
-    pub async fn wait_pop(&mut self) -> Option<YoutubeInfo> {
-        let first = self.queue.pop_front()?;
+    pub async fn try_pop(&mut self) -> Option<Option<YoutubeInfo>> {
+        let Some(first) = self.queue.pop_front() else {
+            return Some(None);
+        };
         match first {
-            QueueEntry::Fetched(info) => Some(info),
+            QueueEntry::Fetched(info) => Some(Some(info)),
             QueueEntry::Fetching(task) => {
-                let result = task.task.await.unwrap();
-                let mut list = VecDeque::from(result);
-                let info = list.pop_front();
-                while let Some(info) = list.pop_back() {
-                    self.queue.push_front(QueueEntry::Fetched(info));
-                }
-                info
+                self.queue.push_front(QueueEntry::Fetching(task));
+                None
             }
         }
     }
@@ -48,10 +89,6 @@ impl SongQueue {
 }
 
 impl FetchTask {
-    pub fn new(task: Task<anyhow::Result<Vec<YoutubeInfo>>>, url: String) -> Self {
-        FetchTask { task, url }
-    }
-
     pub fn url(&self) -> &str {
         &self.url
     }

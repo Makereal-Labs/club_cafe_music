@@ -14,7 +14,7 @@ use smol::{
 use crate::{AppState, BroadcastEvent, PlayerEvent, decoder::decode, http_stream::HttpStream};
 
 pub async fn player(
-    state: &Mutex<AppState>,
+    state: &Mutex<AppState<'_>>,
     player_event_rx: Receiver<PlayerEvent>,
     broadcast_tx: Sender<BroadcastEvent>,
 ) {
@@ -43,10 +43,16 @@ pub async fn player(
         let mut queue_was_not_empty = true;
         loop {
             let info = {
-                let mut state = state.lock().await;
-                let info = state.queue.wait_pop().await;
-                state.now_playing = info.clone();
-                info
+                loop {
+                    {
+                        let mut state = state.lock().await;
+                        if let Some(info) = state.queue.try_pop().await {
+                            state.now_playing = info.clone();
+                            break info;
+                        }
+                    }
+                    Timer::after(Duration::from_millis(200)).await;
+                }
             };
 
             if queue_was_not_empty || info.is_some() {
