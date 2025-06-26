@@ -2,7 +2,6 @@ use std::mem::forget;
 use std::time::Duration;
 
 use log::{error, info};
-use reqwest::blocking::Client;
 use rodio::Sink;
 use smol::{
     Timer,
@@ -10,6 +9,7 @@ use smol::{
     future::zip,
     lock::Mutex,
 };
+use ureq::Agent;
 
 use crate::{AppState, BroadcastEvent, PlayerEvent, decoder::decode, http_stream::HttpStream};
 
@@ -21,7 +21,7 @@ pub async fn player(
     let (stream, stream_handle) = rodio::OutputStream::try_default().unwrap();
     forget(stream);
     let sink = Sink::try_new(&stream_handle).unwrap();
-    let client = Client::new();
+    let agent: Agent = Agent::config_builder().build().into();
 
     let task1 = async {
         while let Ok(event) = player_event_rx.recv().await {
@@ -81,7 +81,7 @@ pub async fn player(
                     }
                 };
 
-                let http_stream = match HttpStream::new(client.clone(), &format.url) {
+                let http_stream = match HttpStream::new(agent.clone(), &format.url) {
                     Ok(http_stream) => http_stream,
                     Err(err) => {
                         error!("Fetch url failed: {}", err);

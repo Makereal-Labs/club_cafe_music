@@ -1,8 +1,9 @@
-use reqwest::blocking::Client;
 use std::cmp::min;
 use std::io;
 use std::sync::Mutex;
 use std::sync::mpsc::{Receiver, sync_channel};
+use ureq::Agent;
+use ureq::http::header::CONTENT_LENGTH;
 
 const BUFFER_SIZE: usize = 4 * 1024 * 1024;
 const REQ_CHUNK_SIZE: usize = 64 * 1024;
@@ -14,12 +15,15 @@ pub struct HttpStream {
 }
 
 impl HttpStream {
-    pub fn new(client: Client, url: impl Into<String>) -> anyhow::Result<Self> {
+    pub fn new(agent: Agent, url: impl Into<String>) -> anyhow::Result<Self> {
         let url = url.into();
-        let response = client.get(&url).send()?;
+        let response = agent.get(&url).call()?;
         let len = response
-            .content_length()
-            .ok_or(anyhow::anyhow!("Content-Length unknown"))? as usize;
+            .headers()
+            .get(CONTENT_LENGTH)
+            .ok_or(anyhow::anyhow!("Content-Length unknown"))?
+            .to_str()?
+            .parse()?;
         let (tx, rx) = sync_channel(BUFFER_SIZE);
         {
             let url = url.clone();
@@ -27,12 +31,12 @@ impl HttpStream {
                 let mut progress = 0;
                 while progress < len {
                     let chunk_end = min(progress + REQ_CHUNK_SIZE, len);
-                    let response = client
+                    let response = agent
                         .get(&url)
                         .header("Range", format!("bytes={}-{}", progress, chunk_end - 1))
-                        .send()
+                        .call()
                         .map_err(|err| io::Error::other(Box::new(err)));
-                    let response = match response {
+                    let mut response = match response {
                         Ok(response) => response,
                         Err(error) => {
                             let _ = tx.send(Err(error));
@@ -40,7 +44,8 @@ impl HttpStream {
                         }
                     };
                     let bytes = response
-                        .bytes()
+                        .body_mut()
+                        .read_to_vec()
                         .map_err(|err| io::Error::other(Box::new(err)));
                     let bytes = match bytes {
                         Ok(bytes) => bytes,
