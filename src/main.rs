@@ -28,6 +28,7 @@ struct AppState<'ex> {
 #[derive(Debug)]
 struct PlayerState {
     playing: bool,
+    volume: f32,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -42,6 +43,7 @@ enum HandlerEvent {
     Pause,
     Resume,
     Skip,
+    SetVolume,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -49,11 +51,15 @@ enum PlayerEvent {
     Pause,
     Resume,
     Skip,
+    SetVolume,
 }
 
 impl Default for PlayerState {
     fn default() -> Self {
-        PlayerState { playing: true }
+        PlayerState {
+            playing: true,
+            volume: 0.7,
+        }
     }
 }
 
@@ -136,6 +142,10 @@ fn main() {
                 }
                 HandlerEvent::Skip => {
                     let _ = player_event_tx.send(PlayerEvent::Skip).await;
+                }
+                HandlerEvent::SetVolume => {
+                    let _ = player_event_tx.send(PlayerEvent::SetVolume).await;
+                    let _ = broadcast_tx.send(BroadcastEvent::UpdatePlayer).await;
                 }
             }
         }

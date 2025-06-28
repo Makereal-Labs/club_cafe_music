@@ -58,6 +58,7 @@ pub async fn handle(
                     json!({
                         "msg": "player",
                         "playing": state.player.playing,
+                        "volume": state.player.volume,
                     })
                 }
             };
@@ -132,6 +133,24 @@ pub async fn handle(
                         warn!("Malformed client message: msg = btn, action not found");
                     }
                 }
+                "volume" => match obj.get("volume") {
+                    Some(Number(volume)) => {
+                        if let Some(volume) = volume.as_f64() {
+                            state.lock().await.player.volume = volume as f32;
+                            let _ = handler_event_tx.send(HandlerEvent::SetVolume).await;
+                        } else {
+                            warn!(
+                                "Malformed client message: msg = volume, value is not float ({volume})"
+                            );
+                        }
+                    }
+                    Some(_) => {
+                        warn!("Malformed client message: msg = volume, value is not number");
+                    }
+                    None => {
+                        warn!("Malformed client message: msg = volume, volume not found");
+                    }
+                },
                 _ => {
                     warn!("Unknown client message: msg = {msg}");
                 }

@@ -23,6 +23,16 @@ pub async fn player(
     let sink = Sink::try_new(&stream_handle).unwrap();
     let agent: Agent = Agent::config_builder().build().into();
 
+    {
+        let state = state.lock().await;
+        if state.player.playing {
+            sink.play();
+        } else {
+            sink.pause();
+        }
+        sink.set_volume(state.player.volume);
+    }
+
     let task1 = async {
         while let Ok(event) = player_event_rx.recv().await {
             match event {
@@ -34,6 +44,9 @@ pub async fn player(
                 }
                 PlayerEvent::Skip => {
                     sink.skip_one();
+                }
+                PlayerEvent::SetVolume => {
+                    sink.set_volume(state.lock().await.player.volume);
                 }
             }
         }
