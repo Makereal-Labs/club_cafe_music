@@ -23,7 +23,9 @@ function format_time(time: number): string {
 
 type PlayerProps = {
   playing: boolean,
+  volume: number,
   onButton: (action: string) => void,
+  onVolumeSlider: (volume: number) => void,
 };
 
 function Player(props: PlayerProps) {
@@ -78,7 +80,7 @@ function Player(props: PlayerProps) {
       </Box>
       <Stack direction="row" alignItems="center" spacing="16px">
         <VolumeDownRounded color="disabled" />
-        <Slider />
+        <Slider min={0} max={1} step={0.01} value={props.volume} onChange={(event, value) => props.onVolumeSlider(value)} />
         <VolumeUpRounded color="disabled" />
       </Stack>
     </Box>

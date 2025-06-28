@@ -58,6 +58,7 @@ function App() {
   const [theme, setTheme] = useState(ThemeId.Dark);
   // player
   const [playing, setPlaying] = useState(false);
+  const [volume, setVolume] = useState(0);
   // queue
   const [now_playing, setNowPlaying] = useState<ListEntry | null>(null);
   const [recv, setRecv] = useState<Array<ListEntry>>([]);
@@ -86,7 +87,9 @@ function App() {
           setRecv(queue);
         } else if (body["msg"] == "player") {
           const playing = body["playing"] as boolean;
-          setPlaying(playing)
+          const volume = body["volume"] as number;
+          setPlaying(playing);
+          setVolume(volume);
         } else if (body["msg"] == "snackbar") {
           const msg = body["text"] as string;
           display_snackbar(msg);
@@ -130,6 +133,15 @@ function App() {
     const msg = {
       msg: "btn",
       action: action,
+    };
+    session.send(JSON.stringify(msg));
+  }
+
+  function on_volume_slider(volume: number) {
+    setVolume(volume);
+    const msg = {
+      msg: "volume",
+      volume: volume,
     };
     session.send(JSON.stringify(msg));
   }
@@ -185,7 +197,9 @@ function App() {
           <Toolbar />
           <Player
             playing={playing}
+            volume={volume}
             onButton={on_player_button}
+            onVolumeSlider={on_volume_slider}
           />
           <form onSubmit={event => { event.preventDefault(); on_yt_submit(); }}>
             <TextField
