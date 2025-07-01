@@ -80,7 +80,7 @@ function Player(props: PlayerProps) {
       </Box>
       <Stack direction="row" alignItems="center" spacing="16px">
         <VolumeDownRounded color="disabled" />
-        <Slider min={0} max={1} step={0.01} value={props.volume} onChange={(event, value) => props.onVolumeSlider(value)} />
+        <Slider min={0} max={1} step={0.01} value={props.volume} onChange={(_, value) => props.onVolumeSlider(value as number)} />
         <VolumeUpRounded color="disabled" />
       </Stack>
     </Box>
