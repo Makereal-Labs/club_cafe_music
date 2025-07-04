@@ -1,6 +1,7 @@
 use std::{collections::VecDeque, mem::take, time::Duration};
 
 use futures::StreamExt;
+use log::error;
 use smol::{Executor, Task, Timer, channel::Sender, lock::Mutex};
 
 use crate::{AppState, HandlerEvent, yt_dlp::YoutubeInfo};
@@ -40,10 +41,16 @@ pub async fn process_queue(state: &Mutex<AppState<'_>>, handler_event_tx: Sender
                         QueueEntry::Fetching(task) => {
                             if task.task.is_finished() {
                                 queue_changed = true;
-                                let list = task.task.await.unwrap();
-                                for info in list {
-                                    state.queue.queue.push_back(QueueEntry::Fetched(info));
-                                }
+                                match task.task.await {
+                                    Ok(list) => {
+                                        for info in list {
+                                            state.queue.queue.push_back(QueueEntry::Fetched(info));
+                                        }
+                                    }
+                                    Err(error) => {
+                                        error!("yt-dlp Failed: {error}");
+                                    }
+                                };
                             } else {
                                 state.queue.queue.push_back(QueueEntry::Fetching(task));
                             }
