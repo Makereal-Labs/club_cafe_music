@@ -174,7 +174,7 @@ function App() {
       >
         <ListItemText
           primary={item.fetched ? item.title : "Fetching..."}
-          secondary={item.fetched ? time : item.url}
+          secondary={item.fetched ? time : (item.title ? item.title : item.url)}
         />
       </ListItem>
       <Divider />
