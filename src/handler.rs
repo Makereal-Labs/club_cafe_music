@@ -47,6 +47,9 @@ pub async fn handle(
                         QueueEntry::Refetching(task) => {
                             json!({"fetched": false, "url": task.url(), "title": task.title()})
                         }
+                        QueueEntry::PendingRefetch(task) => {
+                            json!({"fetched": false, "url": task.url(), "title": task.title()})
+                        }
                     };
                     let now_playing = state.now_playing.as_ref().map(info_to_json);
                     let queue = state.queue.iter().map(entry_to_json).collect::<Vec<_>>();

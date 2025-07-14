@@ -20,6 +20,7 @@ pub enum QueueEntry {
     Fetched(YoutubeInfo),
     Fetching(FetchTask),
     Refetching(RefetchTask),
+    PendingRefetch(PendingRefetchTask),
 }
 
 #[derive(Debug)]
@@ -35,6 +36,12 @@ pub struct RefetchTask {
     task: Task<anyhow::Result<YtdlpResult>>,
 }
 
+#[derive(Debug)]
+pub struct PendingRefetchTask {
+    url: String,
+    title: String,
+}
+
 pub async fn process_queue(state: &Mutex<AppState<'_>>, handler_event_tx: Sender<HandlerEvent>) {
     const PERIOD: Duration = Duration::from_millis(100);
     let mut timer = Timer::interval(PERIOD);
@@ -44,6 +51,7 @@ pub async fn process_queue(state: &Mutex<AppState<'_>>, handler_event_tx: Sender
             let mut state = state.lock().await;
             if state.queue.executor.try_tick() {
                 let old_queue = take(&mut state.queue.queue);
+                let mut fetching_counter = 0;
                 for entry in old_queue {
                     match entry {
                         QueueEntry::Fetched(info) => {
@@ -63,13 +71,22 @@ pub async fn process_queue(state: &Mutex<AppState<'_>>, handler_event_tx: Sender
                                                 info.id
                                             );
                                             let title = info.title;
-                                            let future = get_ytdlp(url.clone());
-                                            let task = state.queue.executor.spawn(future);
-                                            let task = RefetchTask { url, title, task };
-                                            state
-                                                .queue
-                                                .queue
-                                                .push_back(QueueEntry::Refetching(task));
+                                            if fetching_counter < 5 {
+                                                let future = get_ytdlp(url.clone());
+                                                let task = state.queue.executor.spawn(future);
+                                                let task = RefetchTask { url, title, task };
+                                                state
+                                                    .queue
+                                                    .queue
+                                                    .push_back(QueueEntry::Refetching(task));
+                                                fetching_counter += 1;
+                                            } else {
+                                                let task = PendingRefetchTask { url, title };
+                                                state
+                                                    .queue
+                                                    .queue
+                                                    .push_back(QueueEntry::PendingRefetch(task));
+                                            }
                                         }
                                     }
                                     Err(error) => {
@@ -78,6 +95,7 @@ pub async fn process_queue(state: &Mutex<AppState<'_>>, handler_event_tx: Sender
                                 };
                             } else {
                                 state.queue.queue.push_back(QueueEntry::Fetching(task));
+                                fetching_counter += 1;
                             }
                         }
                         QueueEntry::Refetching(task) => {
@@ -96,6 +114,24 @@ pub async fn process_queue(state: &Mutex<AppState<'_>>, handler_event_tx: Sender
                                 };
                             } else {
                                 state.queue.queue.push_back(QueueEntry::Refetching(task));
+                                fetching_counter += 1;
+                            }
+                        }
+                        QueueEntry::PendingRefetch(task) => {
+                            if fetching_counter < 5 {
+                                let future = get_ytdlp(task.url.clone());
+                                let task = RefetchTask {
+                                    url: task.url,
+                                    title: task.title,
+                                    task: state.queue.executor.spawn(future),
+                                };
+                                state.queue.queue.push_back(QueueEntry::Refetching(task));
+                                fetching_counter += 1;
+                            } else {
+                                state
+                                    .queue
+                                    .queue
+                                    .push_back(QueueEntry::PendingRefetch(task));
                             }
                         }
                     }
@@ -134,6 +170,10 @@ impl<'ex> SongQueue<'ex> {
                 self.queue.push_front(QueueEntry::Refetching(task));
                 None
             }
+            QueueEntry::PendingRefetch(task) => {
+                self.queue.push_front(QueueEntry::PendingRefetch(task));
+                None
+            }
         }
     }
 
@@ -149,6 +189,16 @@ impl FetchTask {
 }
 
 impl RefetchTask {
+    pub fn url(&self) -> &str {
+        &self.url
+    }
+
+    pub fn title(&self) -> &str {
+        &self.title
+    }
+}
+
+impl PendingRefetchTask {
     pub fn url(&self) -> &str {
         &self.url
     }
