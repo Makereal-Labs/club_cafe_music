@@ -4,7 +4,10 @@ use futures::StreamExt;
 use log::error;
 use smol::{Executor, Task, Timer, channel::Sender, lock::Mutex};
 
-use crate::{AppState, HandlerEvent, yt_dlp::YoutubeInfo};
+use crate::{
+    AppState, HandlerEvent,
+    yt_dlp::{YoutubeInfo, YtdlpResult, get_ytdlp},
+};
 
 #[derive(Debug, Default)]
 pub struct SongQueue<'ex> {
@@ -16,12 +19,20 @@ pub struct SongQueue<'ex> {
 pub enum QueueEntry {
     Fetched(YoutubeInfo),
     Fetching(FetchTask),
+    Refetching(RefetchTask),
 }
 
 #[derive(Debug)]
 pub struct FetchTask {
     url: String,
-    task: Task<anyhow::Result<Vec<YoutubeInfo>>>,
+    task: Task<anyhow::Result<YtdlpResult>>,
+}
+
+#[derive(Debug)]
+pub struct RefetchTask {
+    url: String,
+    title: String,
+    task: Task<anyhow::Result<YtdlpResult>>,
 }
 
 pub async fn process_queue(state: &Mutex<AppState<'_>>, handler_event_tx: Sender<HandlerEvent>) {
@@ -42,9 +53,23 @@ pub async fn process_queue(state: &Mutex<AppState<'_>>, handler_event_tx: Sender
                             if task.task.is_finished() {
                                 queue_changed = true;
                                 match task.task.await {
-                                    Ok(list) => {
+                                    Ok(YtdlpResult::Single(info)) => {
+                                        state.queue.queue.push_back(QueueEntry::Fetched(info));
+                                    }
+                                    Ok(YtdlpResult::Playlist(list)) => {
                                         for info in list {
-                                            state.queue.queue.push_back(QueueEntry::Fetched(info));
+                                            let url = format!(
+                                                "https://www.youtube.com/watch?v={}",
+                                                info.id
+                                            );
+                                            let title = info.title;
+                                            let future = get_ytdlp(url.clone());
+                                            let task = state.queue.executor.spawn(future);
+                                            let task = RefetchTask { url, title, task };
+                                            state
+                                                .queue
+                                                .queue
+                                                .push_back(QueueEntry::Refetching(task));
                                         }
                                     }
                                     Err(error) => {
@@ -53,6 +78,24 @@ pub async fn process_queue(state: &Mutex<AppState<'_>>, handler_event_tx: Sender
                                 };
                             } else {
                                 state.queue.queue.push_back(QueueEntry::Fetching(task));
+                            }
+                        }
+                        QueueEntry::Refetching(task) => {
+                            if task.task.is_finished() {
+                                queue_changed = true;
+                                match task.task.await {
+                                    Ok(YtdlpResult::Single(info)) => {
+                                        state.queue.queue.push_back(QueueEntry::Fetched(info));
+                                    }
+                                    Err(error) => {
+                                        error!("yt-dlp Failed: {error}");
+                                    }
+                                    Ok(YtdlpResult::Playlist(_)) => {
+                                        unreachable!();
+                                    }
+                                };
+                            } else {
+                                state.queue.queue.push_back(QueueEntry::Refetching(task));
                             }
                         }
                     }
@@ -69,7 +112,7 @@ pub async fn process_queue(state: &Mutex<AppState<'_>>, handler_event_tx: Sender
 impl<'ex> SongQueue<'ex> {
     pub fn push_task(
         &mut self,
-        future: impl Future<Output = anyhow::Result<Vec<YoutubeInfo>>> + Send + 'ex,
+        future: impl Future<Output = anyhow::Result<YtdlpResult>> + Send + 'ex,
         url: String,
     ) {
         let task = self.executor.spawn(future);
@@ -87,6 +130,10 @@ impl<'ex> SongQueue<'ex> {
                 self.queue.push_front(QueueEntry::Fetching(task));
                 None
             }
+            QueueEntry::Refetching(task) => {
+                self.queue.push_front(QueueEntry::Refetching(task));
+                None
+            }
         }
     }
 
@@ -98,5 +145,15 @@ impl<'ex> SongQueue<'ex> {
 impl FetchTask {
     pub fn url(&self) -> &str {
         &self.url
+    }
+}
+
+impl RefetchTask {
+    pub fn url(&self) -> &str {
+        &self.url
+    }
+
+    pub fn title(&self) -> &str {
+        &self.title
     }
 }
