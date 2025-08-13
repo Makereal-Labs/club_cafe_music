@@ -9,3 +9,13 @@ On ubuntu based system:
 `sudo apt install -y build-essential cmake libssl-dev librust-alsa-sys-dev`
 
 (please make an issue if some dependencies are not listed)
+
+## Build & Run
+
+Build: `cargo b`
+
+Build & Run: `cargo r`
+
+Build in release mode: `cargo b -r`
+
+Build & Run in release mode: `cargo r -r`
