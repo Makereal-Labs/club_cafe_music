@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 
-const SERVER_URL = "ws://192.168.50.3/ws/";
+const SERVER_URL = "wss://pi.makereallabs.org/ws/";
 
 type OpenHandler = (ev: Event) => void;
 type ErrorHandler = (ev: Event) => void;
