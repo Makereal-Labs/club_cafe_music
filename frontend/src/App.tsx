@@ -20,6 +20,7 @@ import ThemeToggle from './ThemeToggle.tsx';
 import { get_theme, ThemeId } from './theme.ts';
 import { Link } from '@mui/icons-material';
 import CustomSnackbar from './CustomSnackbar.tsx';
+import ChangelogView from './ChangeLogView.tsx';
 
 type ListEntry = {
   fetched: boolean,
@@ -191,6 +192,7 @@ function App() {
             </Typography>
             <Box sx={{ flexGrow: 1 }} />
             <ThemeToggle value={theme} onClick={on_theme_toggle} />
+            <ChangelogView />
           </Toolbar>
         </AppBar>
         <Container>
