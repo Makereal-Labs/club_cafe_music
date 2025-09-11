@@ -20,7 +20,7 @@ import ThemeToggle from './ThemeToggle.tsx';
 import { get_theme, ThemeId } from './theme.ts';
 import { Link } from '@mui/icons-material';
 import CustomSnackbar from './CustomSnackbar.tsx';
-import ChangelogView from './ChangeLogView.tsx';
+import ChangelogView from './ChangelogView.tsx';
 
 type ListEntry = {
   fetched: boolean,
