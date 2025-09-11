@@ -44,11 +44,20 @@ export function useSession(
     };
   };
 
+  const _onClose = (ev: CloseEvent) => {
+    setTimeout(() => {
+      if (session.readyState == session.CLOSED) {
+        setSession(new WebSocket(SERVER_URL));
+      }
+    }, 100);
+    onClose(ev);
+  };
+
   const updateCloseHandler = () => {
     if (!session) return;
-    session.addEventListener('close', onClose);
+    session.addEventListener('close', _onClose);
     return () => {
-      session.removeEventListener('close', onClose);
+      session.removeEventListener('close', _onClose);
     };
   };
 
