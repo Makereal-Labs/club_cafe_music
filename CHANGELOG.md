@@ -4,6 +4,12 @@ How to write a good changelog: [zh-TW](https://keepachangelog.com/zh-TW/1.1.0/),
 
 ## Unreleased
 
+## v0.1.1
+
+### Added
+
+- Frontend will attempt reconnect to service if disconnected
+
 ## v0.1.0
 
 ### Added
