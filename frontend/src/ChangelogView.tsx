@@ -1,5 +1,5 @@
 import { NotesOutlined } from "@mui/icons-material";
-import { Dialog, DialogContent, DialogContentText, DialogTitle, IconButton, Typography } from "@mui/material";
+import { Dialog, DialogContent, DialogTitle, IconButton, Typography } from "@mui/material";
 import { useState } from "react";
 import Markdown from "react-markdown";
 
@@ -26,17 +26,17 @@ function ChangelogView() {
           }}
         />
         <DialogContent>
-          <DialogContentText>
-            <Markdown
-              children={ChangelogMd}
-              disallowedElements={["h1"]}
-              components={{
-                h2: ({ ...props }) => <Typography variant="h4" sx={{ paddingTop: 2 }} {...props} />,
-                h3: ({ ...props }) => <Typography variant="h5" sx={{ paddingTop: 2 }} {...props} />,
-                h4: ({ ...props }) => <Typography variant="h6" sx={{ paddingTop: 2 }} {...props} />,
-              }}
-            />
-          </DialogContentText>
+          <Markdown
+            children={ChangelogMd}
+            disallowedElements={["h1"]}
+            components={{
+              h2: ({ ...props }) => <Typography variant="h4" gutterBottom={true} {...props} />,
+              h3: ({ ...props }) => <Typography variant="h5" gutterBottom={true} {...props} />,
+              h4: ({ ...props }) => <Typography variant="h6" gutterBottom={true} {...props} />,
+              p: ({ ...props }) => <Typography gutterBottom={true} {...props} />,
+              ul: ({ ...props }) => <Typography gutterBottom={true} {...props} />,
+            }}
+          />
         </DialogContent>
       </Dialog>
     </>
