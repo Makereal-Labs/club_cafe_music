@@ -7,7 +7,7 @@ mod player;
 mod song_queue;
 mod yt_dlp;
 
-use std::io::Read;
+use std::io::BufReader;
 
 use ffmpeg_next::format::context::input::dump;
 use rodio::Sink;
@@ -92,10 +92,7 @@ fn main() {
 
     println!("Debug start!");
     let path = "/home/quick/Music/forever.mp3";
-    let mut file = std::fs::File::open(path).unwrap();
-    let mut data = Vec::new();
-    file.read_to_end(&mut data).unwrap();
-    let data = data.into_boxed_slice();
+    let data = BufReader::new(std::fs::File::open(path).unwrap());
     let (buf_input, input) = match BufferInput::new(data) {
         Ok(v) => v,
         Err(error) => {

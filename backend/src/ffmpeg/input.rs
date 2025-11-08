@@ -1,6 +1,6 @@
 use std::{
-    cmp::min,
     ffi::{CString, c_int, c_void},
+    io::{BufRead, Seek, SeekFrom},
     ptr::{null, null_mut},
 };
 
@@ -15,34 +15,33 @@ use ffmpeg_next::{
     format::context::Input,
 };
 
-pub struct BufferInput {
-    _data: Box<DataBuffer>,
+pub struct BufferInput<T: BufRead + Seek> {
+    _data: Box<DataBuffer<T>>,
     buffer: *mut u8,
     context: *mut AVIOContext,
 }
 
-unsafe impl Send for BufferInput {}
+unsafe impl<T: BufRead + Seek + Send> Send for BufferInput<T> {}
 
-struct DataBuffer {
-    cursor: i64,
-    data: Box<[u8]>,
+struct DataBuffer<T: BufRead + Seek> {
+    data: T,
 }
 
-type OpaquePointer = *mut DataBuffer;
+type OpaquePointer<T> = *mut DataBuffer<T>;
 
-impl BufferInput {
-    pub fn new(data: Box<[u8]>) -> Result<(Self, Input), i32> {
-        let mut data = Box::new(DataBuffer { data, cursor: 0 });
+impl<T: BufRead + Seek> BufferInput<T> {
+    pub fn new(data: T) -> Result<(Self, Input), i32> {
+        let mut data = Box::new(DataBuffer { data });
         let buffer_size = 4096;
         let buffer = unsafe { av_malloc(buffer_size) } as *mut u8;
         if buffer.is_null() {
             return Err(AVERROR(ENOMEM));
         }
         let write_flag = 0;
-        let opaque = data.as_mut() as OpaquePointer;
-        let read_packet = Some(io_read as IoReadFn);
+        let opaque = data.as_mut() as OpaquePointer<T>;
+        let read_packet = Some(io_read::<T> as IoReadFn);
         let write_packet = None;
-        let seek = Some(io_seek as IoSeekFn);
+        let seek = Some(io_seek::<T> as IoSeekFn);
         // Documentation: https://www.ffmpeg.org/doxygen/8.0/avio_8h.html#a50c588d3c44707784f3afde39e1c181c
         let context = unsafe {
             avio_alloc_context(
@@ -70,10 +69,16 @@ impl BufferInput {
 
         let filename = CString::from(c"");
         // take a 256 byte sample for probing
+        let mut head_buf = [0u8; 256];
+        let head_buf_len = data
+            .data
+            .read(&mut head_buf)
+            .expect("Failed to read buffer");
+        data.data.rewind().expect("Failed to seek buffer");
         let probe_data = AVProbeData {
             filename: filename.as_ptr(),
-            buf: data.data.as_mut_ptr(),
-            buf_size: 256,
+            buf: head_buf.as_mut_ptr(),
+            buf_size: head_buf_len as i32,
             mime_type: null(),
         };
         let is_opened = 1;
@@ -110,7 +115,7 @@ impl BufferInput {
     }
 }
 
-impl Drop for BufferInput {
+impl<T: BufRead + Seek> Drop for BufferInput<T> {
     fn drop(&mut self) {
         unsafe { av_free(self.buffer as *mut c_void) };
         unsafe { avio_context_free(&mut self.context) };
@@ -119,43 +124,63 @@ impl Drop for BufferInput {
 
 type IoReadFn = unsafe extern "C" fn(opaque: *mut c_void, buf: *mut u8, buf_size: c_int) -> c_int;
 
-unsafe extern "C" fn io_read(opaque: *mut c_void, buf: *mut u8, buf_size: c_int) -> c_int {
-    let data = unsafe { (opaque as OpaquePointer).as_mut() }.expect("Caught null ptr");
+unsafe extern "C" fn io_read<T: BufRead + Seek>(
+    opaque: *mut c_void,
+    buf: *mut u8,
+    buf_size: c_int,
+) -> c_int {
+    let data = unsafe { (opaque as OpaquePointer<T>).as_mut() }.expect("Caught null ptr");
     let buffer = unsafe { std::slice::from_raw_parts_mut(buf, buf_size as usize) };
-    if data.data.len() <= data.cursor as usize {
-        return AVERROR_EOF;
-    }
-    let read_len = min(buf_size as usize, data.data.len() - data.cursor as usize);
-    buffer[..read_len]
-        .copy_from_slice(&data.data[data.cursor as usize..(data.cursor as usize + read_len)]);
-    data.cursor += read_len as i64;
-    read_len as c_int
+
+    let len = match data.data.read(buffer) {
+        Ok(len) => len,
+        Err(error) => {
+            todo!("{error}")
+        }
+    };
+
+    if len == 0 { AVERROR_EOF } else { len as c_int }
 }
 
 type IoSeekFn = unsafe extern "C" fn(opaque: *mut c_void, offset: i64, whence: c_int) -> i64;
 
-unsafe extern "C" fn io_seek(opaque: *mut c_void, offset: i64, whence: c_int) -> i64 {
-    let data = unsafe { (opaque as OpaquePointer).as_mut() }.expect("Caught null ptr");
+unsafe extern "C" fn io_seek<T: BufRead + Seek>(
+    opaque: *mut c_void,
+    offset: i64,
+    whence: c_int,
+) -> i64 {
+    let data = unsafe { (opaque as OpaquePointer<T>).as_mut() }.expect("Caught null ptr");
 
-    match whence {
+    let seek_from = match whence {
         AVSEEK_SIZE => {
-            return data.data.len() as i64;
+            return match get_stream_len(&mut data.data) {
+                Ok(len) => len as i64,
+                Err(_error) => {
+                    return -1;
+                }
+            };
         }
-        SEEK_SET => {
-            data.cursor = offset;
-        }
-        SEEK_CUR => {
-            data.cursor += offset;
-        }
-        SEEK_END => {
-            data.cursor = data.data.len() as i64 + offset;
-        }
+        SEEK_SET => SeekFrom::Start(offset as u64),
+        SEEK_CUR => SeekFrom::Current(offset),
+        SEEK_END => SeekFrom::End(offset),
         _ => unreachable!(),
+    };
+    match data.data.seek(seek_from) {
+        Ok(pos) => pos as i64,
+        Err(_error) => -1,
     }
-    if data.cursor < 0 || data.cursor >= data.data.len() as i64 {
-        return -1;
+}
+
+// code borrowed from nightly rust (`seek_stream_len`)
+fn get_stream_len<T: Seek>(seek: &mut T) -> std::io::Result<u64> {
+    let old_pos = seek.stream_position()?;
+    let len = seek.seek(SeekFrom::End(0))?;
+
+    if old_pos != len {
+        seek.seek(SeekFrom::Start(old_pos))?;
     }
-    data.cursor
+
+    Ok(len)
 }
 
 pub fn averror_to_string(error_code: c_int) -> String {
