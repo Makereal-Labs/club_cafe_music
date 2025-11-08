@@ -9,6 +9,7 @@ mod yt_dlp;
 
 use std::io::Read;
 
+use ffmpeg_next::format::context::input::dump;
 use rodio::Sink;
 use simplelog::{ColorChoice, ConfigBuilder, TermLogger, TerminalMode};
 use smol::prelude::*;
@@ -104,6 +105,7 @@ fn main() {
             todo!()
         }
     };
+    dump(&input, 0, None);
     let dec = Decoder::new(input, Some(buf_input)).unwrap();
 
     let (stream, stream_handle) = rodio::OutputStream::try_default().unwrap();

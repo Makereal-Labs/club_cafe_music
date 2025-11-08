@@ -8,9 +8,9 @@ use ffmpeg_next::{
     error::ENOMEM,
     ffi::{
         AVERROR, AVERROR_EOF, AVFMT_FLAG_CUSTOM_IO, AVIOContext, AVProbeData, AVSEEK_SIZE,
-        SEEK_CUR, SEEK_END, SEEK_SET, av_dump_format, av_free, av_malloc, av_probe_input_format,
-        av_strerror, avformat_alloc_context, avformat_find_stream_info, avformat_open_input,
-        avio_alloc_context, avio_context_free,
+        SEEK_CUR, SEEK_END, SEEK_SET, av_free, av_malloc, av_probe_input_format, av_strerror,
+        avformat_alloc_context, avformat_find_stream_info, avformat_open_input, avio_alloc_context,
+        avio_context_free,
     },
     format::context::Input,
 };
@@ -98,8 +98,6 @@ impl BufferInput {
             );
             return Err(error_code);
         }
-
-        unsafe { av_dump_format(format_context, 0, url, 0) };
 
         Ok((
             BufferInput {
