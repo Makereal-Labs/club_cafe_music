@@ -104,7 +104,7 @@ fn main() {
             todo!()
         }
     };
-    let dec = Decoder::new(input).unwrap();
+    let dec = Decoder::new(input, Some(buf_input)).unwrap();
 
     let (stream, stream_handle) = rodio::OutputStream::try_default().unwrap();
     std::mem::forget(stream);
@@ -114,7 +114,6 @@ fn main() {
     sink.play();
     sink.sleep_until_end();
     println!("Debug end!");
-    std::mem::drop(buf_input);
 
     let state = Mutex::new(AppState::default());
     let event_listeners = Mutex::new(Vec::new());

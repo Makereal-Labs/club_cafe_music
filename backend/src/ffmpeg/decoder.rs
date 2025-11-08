@@ -3,14 +3,16 @@ use std::collections::VecDeque;
 use ffmpeg_next::{Error, codec, format::context::Input, media};
 use rodio::Source;
 
-pub struct Decoder {
+pub struct Decoder<T> {
     decoder: codec::decoder::Audio,
     input: Input,
     stream_index: usize,
+    _extra: Option<T>,
 }
 
-impl Decoder {
-    pub fn new(input: Input) -> Result<Self, Error> {
+impl<T> Decoder<T> {
+    /// The `extra` field carries data that needs to outlive Input
+    pub fn new(input: Input, extra: Option<T>) -> Result<Self, Error> {
         let stream = input
             .streams()
             .best(media::Type::Audio)
@@ -23,10 +25,11 @@ impl Decoder {
             decoder,
             input,
             stream_index,
+            _extra: extra,
         })
     }
 
-    pub fn decode(mut self) -> Result<DecodeSource, Error> {
+    pub fn decode(mut self) -> Result<DecodeSource<T>, Error> {
         println!("rate: {}", self.decoder.rate());
         let mut buf: VecDeque<f32> = VecDeque::new();
         for (stream, packet) in self.input.packets() {
@@ -59,12 +62,12 @@ impl Decoder {
     }
 }
 
-pub struct DecodeSource {
-    decoder: Decoder,
+pub struct DecodeSource<T> {
+    decoder: Decoder<T>,
     buf: VecDeque<f32>,
 }
 
-impl Iterator for DecodeSource {
+impl<T> Iterator for DecodeSource<T> {
     type Item = f32;
 
     fn next(&mut self) -> Option<Self::Item> {
@@ -72,7 +75,7 @@ impl Iterator for DecodeSource {
     }
 }
 
-impl Source for DecodeSource {
+impl<T> Source for DecodeSource<T> {
     fn current_frame_len(&self) -> Option<usize> {
         None
     }
