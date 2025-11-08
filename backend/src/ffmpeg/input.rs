@@ -16,8 +16,7 @@ use ffmpeg_next::{
 };
 
 pub struct BufferInput {
-    #[allow(unused)]
-    data: Box<DataBuffer>,
+    _data: Box<DataBuffer>,
     buffer: *mut u8,
     context: *mut AVIOContext,
 }
@@ -104,7 +103,7 @@ impl BufferInput {
 
         Ok((
             BufferInput {
-                data,
+                _data: data,
                 buffer,
                 context,
             },
