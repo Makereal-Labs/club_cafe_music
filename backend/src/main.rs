@@ -18,13 +18,11 @@ use smol::{Executor, block_on, channel, future::zip, lock::Mutex, net::TcpListen
 use log::{LevelFilter, error};
 use systemd_journal_logger::{JournalLog, connected_to_journal};
 
-use ffmpeg::{BufferInput, Decoder};
+use ffmpeg::{BufferInput, DecodeSource, averror_to_string};
 use handler::handle;
 use player::player;
 use song_queue::{SongQueue, process_queue};
 use yt_dlp::YoutubeInfo;
-
-use crate::ffmpeg::averror_to_string;
 
 #[derive(Debug, Default)]
 struct AppState<'ex> {
@@ -106,12 +104,12 @@ fn main() {
         }
     };
     dump(&input, 0, None);
-    let dec = Decoder::new(input, Some(buf_input)).unwrap();
+    let source = DecodeSource::new(input, Some(buf_input)).unwrap();
 
     let (stream, stream_handle) = rodio::OutputStream::try_default().unwrap();
     std::mem::forget(stream);
     let sink = Sink::try_new(&stream_handle).unwrap();
-    sink.append(dec.decode().unwrap());
+    sink.append(source);
     sink.set_volume(0.3);
     sink.play();
     sink.sleep_until_end();

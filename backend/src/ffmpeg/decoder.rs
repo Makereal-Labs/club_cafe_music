@@ -3,14 +3,15 @@ use std::collections::VecDeque;
 use ffmpeg_next::{Error, codec, format::context::Input, media};
 use rodio::Source;
 
-pub struct Decoder<T> {
+pub struct DecodeSource<T> {
     decoder: codec::decoder::Audio,
     input: Input,
     stream_index: usize,
+    buf: VecDeque<f32>,
     _extra: Option<T>,
 }
 
-impl<T> Decoder<T> {
+impl<T> DecodeSource<T> {
     /// The `extra` field carries data that needs to outlive Input
     pub fn new(input: Input, extra: Option<T>) -> Result<Self, Error> {
         let stream = input
@@ -21,31 +22,15 @@ impl<T> Decoder<T> {
         let context = codec::context::Context::from_parameters(stream.parameters())?;
         let mut decoder = context.decoder().audio()?;
         decoder.set_parameters(stream.parameters())?;
-        Ok(Decoder {
+
+        Ok(DecodeSource {
             decoder,
             input,
             stream_index,
+            buf: VecDeque::new(),
             _extra: extra,
         })
     }
-
-    pub fn decode(self) -> Result<DecodeSource<T>, Error> {
-        Ok(DecodeSource {
-            decoder: self.decoder,
-            input: self.input,
-            stream_index: self.stream_index,
-            buf: VecDeque::new(),
-            _extra: self._extra,
-        })
-    }
-}
-
-pub struct DecodeSource<T> {
-    decoder: codec::decoder::Audio,
-    input: Input,
-    stream_index: usize,
-    buf: VecDeque<f32>,
-    _extra: Option<T>,
 }
 
 impl<T> Iterator for DecodeSource<T> {
