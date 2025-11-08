@@ -7,7 +7,8 @@ mod player;
 mod song_queue;
 mod yt_dlp;
 
-use ffmpeg_next::format::input;
+use std::io::Read;
+
 use rodio::Sink;
 use simplelog::{ColorChoice, ConfigBuilder, TermLogger, TerminalMode};
 use smol::prelude::*;
@@ -16,11 +17,13 @@ use smol::{Executor, block_on, channel, future::zip, lock::Mutex, net::TcpListen
 use log::{LevelFilter, error};
 use systemd_journal_logger::{JournalLog, connected_to_journal};
 
-use ffmpeg::Decoder;
+use ffmpeg::{BufferInput, Decoder};
 use handler::handle;
 use player::player;
 use song_queue::{SongQueue, process_queue};
 use yt_dlp::YoutubeInfo;
+
+use crate::ffmpeg::averror_to_string;
 
 #[derive(Debug, Default)]
 struct AppState<'ex> {
@@ -90,7 +93,17 @@ fn main() {
 
     println!("Debug start!");
     let path = "/home/quick/Music/forever.mp3";
-    let input = input(path).unwrap();
+    let mut file = std::fs::File::open(path).unwrap();
+    let mut data = Vec::new();
+    file.read_to_end(&mut data).unwrap();
+    let data = data.into_boxed_slice();
+    let (buf_input, input) = match BufferInput::new(data) {
+        Ok(v) => v,
+        Err(error) => {
+            eprintln!("Error: {}", averror_to_string(error));
+            todo!()
+        }
+    };
     let dec = Decoder::new(input).unwrap();
 
     let (stream, stream_handle) = rodio::OutputStream::try_default().unwrap();
@@ -101,6 +114,7 @@ fn main() {
     sink.play();
     sink.sleep_until_end();
     println!("Debug end!");
+    std::mem::drop(buf_input);
 
     let state = Mutex::new(AppState::default());
     let event_listeners = Mutex::new(Vec::new());
