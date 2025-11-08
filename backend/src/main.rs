@@ -1,4 +1,5 @@
 mod decoder;
+mod ffmpeg;
 mod handler;
 mod http_stream;
 mod opus_decoder;
@@ -6,6 +7,8 @@ mod player;
 mod song_queue;
 mod yt_dlp;
 
+use ffmpeg_next::format::input;
+use rodio::Sink;
 use simplelog::{ColorChoice, ConfigBuilder, TermLogger, TerminalMode};
 use smol::prelude::*;
 use smol::{Executor, block_on, channel, future::zip, lock::Mutex, net::TcpListener};
@@ -13,6 +16,7 @@ use smol::{Executor, block_on, channel, future::zip, lock::Mutex, net::TcpListen
 use log::{LevelFilter, error};
 use systemd_journal_logger::{JournalLog, connected_to_journal};
 
+use ffmpeg::Decoder;
 use handler::handle;
 use player::player;
 use song_queue::{SongQueue, process_queue};
@@ -81,6 +85,22 @@ fn main() {
         .unwrap();
     }
     log::set_max_level(LevelFilter::Info);
+
+    ffmpeg_next::init().unwrap();
+
+    println!("Debug start!");
+    let path = "/home/quick/Music/forever.mp3";
+    let input = input(path).unwrap();
+    let dec = Decoder::new(input).unwrap();
+
+    let (stream, stream_handle) = rodio::OutputStream::try_default().unwrap();
+    std::mem::forget(stream);
+    let sink = Sink::try_new(&stream_handle).unwrap();
+    sink.append(dec.decode().unwrap());
+    sink.set_volume(0.3);
+    sink.play();
+    sink.sleep_until_end();
+    println!("Debug end!");
 
     let state = Mutex::new(AppState::default());
     let event_listeners = Mutex::new(Vec::new());
