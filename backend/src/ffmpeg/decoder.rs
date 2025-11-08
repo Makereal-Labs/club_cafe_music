@@ -29,48 +29,65 @@ impl<T> Decoder<T> {
         })
     }
 
-    pub fn decode(mut self) -> Result<DecodeSource<T>, Error> {
-        println!("rate: {}", self.decoder.rate());
-        let mut buf: VecDeque<f32> = VecDeque::new();
-        for (stream, packet) in self.input.packets() {
-            if stream.index() == self.stream_index {
-                self.decoder.send_packet(&packet)?;
-
-                let mut decoded = ffmpeg_next::util::frame::Audio::empty();
-                while self.decoder.receive_frame(&mut decoded).is_ok() {
-                    let mut s = 0;
-                    loop {
-                        let sample: Option<VecDeque<f32>> = (0..decoded.planes())
-                            .map(|p| decoded.plane::<f32>(p).get(s).cloned())
-                            .try_fold(VecDeque::new(), |mut acc, e| {
-                                acc.push_back(e?);
-                                Some(acc)
-                            });
-                        if let Some(mut sample) = sample {
-                            buf.append(&mut sample);
-                        } else {
-                            break;
-                        }
-                        s += 1;
-                    }
-                }
-            }
-        }
-        self.decoder.send_eof()?;
-        println!("len: {}", buf.len());
-        Ok(DecodeSource { decoder: self, buf })
+    pub fn decode(self) -> Result<DecodeSource<T>, Error> {
+        Ok(DecodeSource {
+            decoder: self.decoder,
+            input: self.input,
+            stream_index: self.stream_index,
+            buf: VecDeque::new(),
+            _extra: self._extra,
+        })
     }
 }
 
 pub struct DecodeSource<T> {
-    decoder: Decoder<T>,
+    decoder: codec::decoder::Audio,
+    input: Input,
+    stream_index: usize,
     buf: VecDeque<f32>,
+    _extra: Option<T>,
 }
 
 impl<T> Iterator for DecodeSource<T> {
     type Item = f32;
 
     fn next(&mut self) -> Option<Self::Item> {
+        // relying on the fact that `PacketIter<'_>` does not store internal state
+        let mut packet_iter = self
+            .input
+            .packets()
+            .filter(|(stream, _)| stream.index() == self.stream_index)
+            .map(|(_, packet)| packet);
+
+        while self.buf.is_empty() {
+            let Some(packet) = packet_iter.next() else {
+                let _ = self.decoder.send_eof();
+                return None;
+            };
+
+            if let Err(error) = self.decoder.send_packet(&packet) {
+                todo!("{error}")
+            }
+
+            let mut decoded = ffmpeg_next::util::frame::Audio::empty();
+            while self.decoder.receive_frame(&mut decoded).is_ok() {
+                let mut s = 0;
+                loop {
+                    let sample: Option<VecDeque<f32>> = (0..decoded.planes())
+                        .map(|p| decoded.plane::<f32>(p).get(s).cloned())
+                        .try_fold(VecDeque::new(), |mut acc, e| {
+                            acc.push_back(e?);
+                            Some(acc)
+                        });
+                    if let Some(mut sample) = sample {
+                        self.buf.append(&mut sample);
+                    } else {
+                        break;
+                    }
+                    s += 1;
+                }
+            }
+        }
         self.buf.pop_front()
     }
 }
@@ -81,11 +98,11 @@ impl<T> Source for DecodeSource<T> {
     }
 
     fn channels(&self) -> u16 {
-        self.decoder.decoder.channels()
+        self.decoder.channels()
     }
 
     fn sample_rate(&self) -> u32 {
-        self.decoder.decoder.rate()
+        self.decoder.rate()
     }
 
     fn total_duration(&self) -> Option<std::time::Duration> {
