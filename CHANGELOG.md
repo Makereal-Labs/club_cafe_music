@@ -4,6 +4,15 @@ How to write a good changelog: [zh-TW](https://keepachangelog.com/zh-TW/1.1.0/),
 
 ## Unreleased
 
+### Changed
+
+- Replace `Symphonia` with `FFMPEG` (using `ffmpeg_next`)
+- Print `stderr` of `yt-dlp` to log
+
+### Fixed
+
+- Fix `HttpStream` not actually seeking when calling `std::io::Seek::seek`
+
 ## v0.1.1
 
 ### Changed
