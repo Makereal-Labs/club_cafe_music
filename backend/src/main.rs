@@ -1,7 +1,6 @@
-mod decoder;
+mod ffmpeg;
 mod handler;
 mod http_stream;
-mod opus_decoder;
 mod player;
 mod song_queue;
 mod yt_dlp;
@@ -81,6 +80,8 @@ fn main() {
         .unwrap();
     }
     log::set_max_level(LevelFilter::Info);
+
+    ffmpeg_next::init().unwrap();
 
     let state = Mutex::new(AppState::default());
     let event_listeners = Mutex::new(Vec::new());

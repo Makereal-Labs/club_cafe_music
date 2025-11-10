@@ -1,3 +1,4 @@
+use std::io::BufReader;
 use std::mem::forget;
 use std::time::Duration;
 
@@ -11,7 +12,8 @@ use smol::{
 };
 use ureq::Agent;
 
-use crate::{AppState, BroadcastEvent, PlayerEvent, decoder::decode, http_stream::HttpStream};
+use crate::ffmpeg::{BufferInput, DecodeSource, averror_to_string};
+use crate::{AppState, BroadcastEvent, PlayerEvent, http_stream::HttpStream};
 
 pub async fn player(
     state: &Mutex<AppState<'_>>,
@@ -102,7 +104,15 @@ pub async fn player(
                     }
                 };
 
-                let source = match decode(Box::new(http_stream)) {
+                let (buf_input, input) = match BufferInput::new(BufReader::new(http_stream)) {
+                    Ok(v) => v,
+                    Err(error) => {
+                        error!("FFMPEG Error: {}", averror_to_string(error));
+                        continue;
+                    }
+                };
+
+                let source = match DecodeSource::new(input, Some(buf_input)) {
                     Ok(source) => source,
                     Err(err) => {
                         error!("Audio decode failed: {}", err);
