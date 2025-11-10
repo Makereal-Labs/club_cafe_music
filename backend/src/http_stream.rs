@@ -12,6 +12,7 @@ pub struct HttpStream {
     len: usize,
     progress: usize,
     rx: Mutex<Receiver<io::Result<u8>>>,
+    buffer: Vec<u8>,
 }
 
 impl HttpStream {
@@ -64,10 +65,13 @@ impl HttpStream {
             });
         }
         let rx = Mutex::new(rx);
+        let mut buffer = Vec::new();
+        buffer.reserve_exact(len);
         Ok(HttpStream {
             len,
             progress: 0,
             rx,
+            buffer,
         })
     }
 }
@@ -77,13 +81,17 @@ impl io::Read for HttpStream {
         if self.progress >= self.len {
             return Ok(0);
         }
-        let chunk_size = min(self.progress + buf.len(), self.len) - self.progress;
-        let rx = self.rx.lock().expect("rx failed to lock");
-        for b in &mut buf[0..chunk_size] {
-            *b = rx.recv().unwrap()?;
+        let read_end = min(self.progress + buf.len(), self.len);
+        let read_size = read_end - self.progress;
+        if self.buffer.len() < read_end {
+            let rx = self.rx.lock().expect("rx failed to lock");
+            while self.buffer.len() < read_end {
+                self.buffer.push(rx.recv().unwrap()?);
+            }
         }
-        self.progress += chunk_size;
-        Ok(chunk_size)
+        buf[..read_size].copy_from_slice(&self.buffer[self.progress..read_end]);
+        self.progress += read_size;
+        Ok(read_size)
     }
 }
 
