@@ -58,13 +58,17 @@ pub async fn get_ytdlp(url: String) -> anyhow::Result<YtdlpResult> {
         .arg(url)
         .stdin(Stdio::null())
         .stdout(Stdio::piped())
-        .stderr(Stdio::null())
+        .stderr(Stdio::piped())
         .spawn()?
         .output()
         .await?;
 
     if !output.status.success() {
-        return Err(anyhow::anyhow!("Call to yt-dlp failed: {}", output.status));
+        return Err(anyhow::anyhow!(
+            "Call to yt-dlp failed: {}\n{}",
+            output.status,
+            std::str::from_utf8(&output.stderr)?
+        ));
     }
 
     let result = std::str::from_utf8(&output.stdout)?;
