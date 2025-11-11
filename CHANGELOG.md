@@ -7,6 +7,7 @@ How to write a good changelog: [zh-TW](https://keepachangelog.com/zh-TW/1.1.0/),
 ### Fixed
 
 - Be more specific with FFI types to prevent type mismatch on different platform
+- Cleanup memory on ffmpeg failed
 
 ## v0.2.0
 
