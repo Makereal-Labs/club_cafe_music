@@ -10,7 +10,7 @@ use ffmpeg_next::{
         AVDictionary, AVERROR, AVERROR_EOF, AVFMT_FLAG_CUSTOM_IO, AVFormatContext, AVIOContext,
         AVInputFormat, AVProbeData, AVSEEK_SIZE, SEEK_CUR, SEEK_END, SEEK_SET, av_free, av_malloc,
         av_probe_input_format, av_strerror, avformat_alloc_context, avformat_find_stream_info,
-        avformat_open_input, avio_alloc_context, avio_context_free,
+        avformat_free_context, avformat_open_input, avio_alloc_context, avio_context_free,
     },
     format::context::Input,
 };
@@ -44,7 +44,7 @@ impl<T: BufRead + Seek> BufferInput<T> {
         let write_packet = None;
         let seek = Some(io_seek::<T> as IoSeekFn);
         // Documentation: https://www.ffmpeg.org/doxygen/8.0/avio_8h.html#a50c588d3c44707784f3afde39e1c181c
-        let context: *mut AVIOContext = unsafe {
+        let mut context: *mut AVIOContext = unsafe {
             avio_alloc_context(
                 buffer as *mut c_uchar,
                 buffer_size as c_int,
@@ -62,6 +62,8 @@ impl<T: BufRead + Seek> BufferInput<T> {
 
         let mut format_context: *mut AVFormatContext = unsafe { avformat_alloc_context() };
         let Some(format_context_ref) = (unsafe { format_context.as_mut() }) else {
+            unsafe { av_free(buffer) };
+            unsafe { avio_context_free(&mut context) };
             return Err(AVERROR(ENOMEM));
         };
         format_context_ref.pb = context;
@@ -91,12 +93,18 @@ impl<T: BufRead + Seek> BufferInput<T> {
         let options: *mut *mut AVDictionary = null_mut();
         let error_code: c_int = unsafe { avformat_open_input(ps, url, fmt, options) };
         if error_code != 0 {
+            unsafe { av_free(buffer) };
+            unsafe { avio_context_free(&mut context) };
+            unsafe { avformat_free_context(format_context) };
             eprintln!("Could not open input: {}", averror_to_string(error_code));
             return Err(error_code);
         }
 
         let error_code: c_int = unsafe { avformat_find_stream_info(format_context, null_mut()) };
         if error_code != 0 {
+            unsafe { av_free(buffer) };
+            unsafe { avio_context_free(&mut context) };
+            unsafe { avformat_free_context(format_context) };
             eprintln!(
                 "Could not find stream information: {}",
                 averror_to_string(error_code)
