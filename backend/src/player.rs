@@ -15,6 +15,14 @@ use ureq::Agent;
 use crate::ffmpeg::{BufferInput, DecodeSource, averror_to_string};
 use crate::{AppState, BroadcastEvent, PlayerEvent, http_stream::HttpStream};
 
+fn adjust_volume(volume: f32) -> f32 {
+    if volume < 0.005 {
+        0.0
+    } else {
+        ((volume - 1.0) * 6.0).exp()
+    }
+}
+
 pub async fn player(
     state: &Mutex<AppState<'_>>,
     player_event_rx: Receiver<PlayerEvent>,
@@ -32,7 +40,7 @@ pub async fn player(
         } else {
             sink.pause();
         }
-        sink.set_volume(state.player.volume);
+        sink.set_volume(adjust_volume(state.player.volume));
     }
 
     let task1 = async {
@@ -48,7 +56,8 @@ pub async fn player(
                     sink.skip_one();
                 }
                 PlayerEvent::SetVolume => {
-                    sink.set_volume(state.lock().await.player.volume);
+                    let volume = state.lock().await.player.volume;
+                    sink.set_volume(adjust_volume(volume.clamp(0.0, 1.0)));
                 }
             }
         }

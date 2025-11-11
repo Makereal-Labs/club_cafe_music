@@ -4,6 +4,10 @@ How to write a good changelog: [zh-TW](https://keepachangelog.com/zh-TW/1.1.0/),
 
 ## Unreleased
 
+### Changed
+
+- Adjusted volume control to using [Logarithmic Volume Control](https://www.dr-lex.be/info-stuff/volumecontrols.html).
+
 ### Fixed
 
 - Be more specific with FFI types to prevent type mismatch on different platform
