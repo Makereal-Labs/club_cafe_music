@@ -333,6 +333,7 @@ dependencies = [
  "async-tungstenite",
  "ffmpeg-next",
  "futures",
+ "libc",
  "log",
  "rodio",
  "serde",
