@@ -86,7 +86,8 @@ impl io::Read for HttpStream {
         if self.buffer.len() < read_end {
             let rx = self.rx.lock().expect("rx failed to lock");
             while self.buffer.len() < read_end {
-                self.buffer.push(rx.recv().unwrap()?);
+                self.buffer
+                    .push(rx.recv().expect("Sender should not be dropped")?);
             }
         }
         buf[..read_size].copy_from_slice(&self.buffer[self.progress..read_end]);

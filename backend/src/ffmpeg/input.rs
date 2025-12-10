@@ -7,14 +7,16 @@ use std::{
 use ffmpeg_next::{
     error::ENOMEM,
     ffi::{
-        AVDictionary, AVERROR, AVERROR_EOF, AVFMT_FLAG_CUSTOM_IO, AVFormatContext, AVIOContext,
-        AVInputFormat, AVProbeData, AVSEEK_SIZE, SEEK_CUR, SEEK_END, SEEK_SET, av_free, av_malloc,
-        av_probe_input_format, av_strerror, avformat_alloc_context, avformat_find_stream_info,
-        avformat_free_context, avformat_open_input, avio_alloc_context, avio_context_free,
+        AVDictionary, AVERROR, AVERROR_EOF, AVERROR_UNKNOWN, AVFMT_FLAG_CUSTOM_IO, AVFormatContext,
+        AVIOContext, AVInputFormat, AVProbeData, AVSEEK_SIZE, SEEK_CUR, SEEK_END, SEEK_SET,
+        av_free, av_malloc, av_probe_input_format, av_strerror, avformat_alloc_context,
+        avformat_find_stream_info, avformat_free_context, avformat_open_input, avio_alloc_context,
+        avio_context_free,
     },
     format::context::Input,
 };
 use libc::{c_char, c_int, c_uchar, c_void};
+use log::error;
 
 pub struct BufferInput<T: BufRead + Seek> {
     _data: Box<DataBuffer<T>>,
@@ -143,7 +145,8 @@ unsafe extern "C" fn io_read<T: BufRead + Seek>(
     let len = match data.data.read(buffer) {
         Ok(len) => len,
         Err(error) => {
-            todo!("{error}")
+            error!("{error}");
+            return AVERROR_UNKNOWN;
         }
     };
 
