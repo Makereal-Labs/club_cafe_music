@@ -4,6 +4,10 @@ How to write a good changelog: [zh-TW](https://keepachangelog.com/zh-TW/1.1.0/),
 
 ## Unreleased
 
+### Fixed
+
+- Removed 2 todo that I forgot to do
+
 ## v0.2.1
 
 ### Changed
