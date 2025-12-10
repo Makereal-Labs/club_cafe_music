@@ -1,6 +1,7 @@
 use std::collections::VecDeque;
 
 use ffmpeg_next::{Error, codec, format::context::Input, media};
+use log::error;
 use rodio::Source;
 
 pub struct DecodeSource<T> {
@@ -51,7 +52,8 @@ impl<T> Iterator for DecodeSource<T> {
             };
 
             if let Err(error) = self.decoder.send_packet(&packet) {
-                todo!("{error}")
+                error!("{error}");
+                return None;
             }
 
             let mut decoded = ffmpeg_next::util::frame::Audio::empty();
