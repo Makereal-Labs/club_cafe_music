@@ -5,12 +5,10 @@ use std::{
 };
 
 use ffmpeg_next::{
-    error::ENOMEM,
     ffi::{
-        AVDictionary, AVERROR, AVERROR_EOF, AVERROR_UNKNOWN, AVFMT_FLAG_CUSTOM_IO, AVFormatContext,
+        AVDictionary, AVERROR_EOF, AVERROR_UNKNOWN, AVFMT_FLAG_CUSTOM_IO, AVFormatContext,
         AVInputFormat, AVProbeData, AVSEEK_SIZE, SEEK_CUR, SEEK_END, SEEK_SET,
-        av_probe_input_format, av_strerror, avformat_alloc_context, avformat_find_stream_info,
-        avformat_free_context, avformat_open_input,
+        av_probe_input_format, av_strerror, avformat_find_stream_info, avformat_open_input,
     },
     format::context::Input,
 };
@@ -18,7 +16,8 @@ use libc::{c_char, c_int, c_uchar, c_void};
 use log::error;
 
 use crate::ffmpeg::wrapper::{
-    AVBufferOwned, AVIOContextInitParameter, AVIOContextOwned, IoReadFn, IoSeekFn,
+    AVBufferOwned, AVFormatContextOwned, AVIOContextInitParameter, AVIOContextOwned, IoReadFn,
+    IoSeekFn,
 };
 
 pub struct BufferInput<T: BufRead + Seek> {
@@ -50,12 +49,9 @@ impl<T: BufRead + Seek> BufferInput<T> {
             seek: Some(io_seek::<T> as IoSeekFn),
         })?;
 
-        let mut format_context: *mut AVFormatContext = unsafe { avformat_alloc_context() };
-        let Some(format_context_ref) = (unsafe { format_context.as_mut() }) else {
-            return Err(AVERROR(ENOMEM));
-        };
-        format_context_ref.pb = context.as_ptr();
-        format_context_ref.flags |= AVFMT_FLAG_CUSTOM_IO;
+        let mut format_context = AVFormatContextOwned::new()?;
+        format_context.pb = context.as_ptr();
+        format_context.flags |= AVFMT_FLAG_CUSTOM_IO;
 
         let filename = CString::from(c"");
         // take a 256 byte sample for probing
@@ -72,23 +68,22 @@ impl<T: BufRead + Seek> BufferInput<T> {
             mime_type: null(),
         };
         let is_opened: c_int = 1;
-        format_context_ref.iformat = unsafe { av_probe_input_format(&probe_data, is_opened) };
+        format_context.iformat = unsafe { av_probe_input_format(&probe_data, is_opened) };
 
-        let ps: *mut *mut AVFormatContext = &mut format_context;
+        let ps: *mut *mut AVFormatContext = &mut (format_context.as_mut() as *mut AVFormatContext);
         let url = CString::from(c"");
         let url: *const c_char = url.as_ptr();
         let fmt: *const AVInputFormat = null();
         let options: *mut *mut AVDictionary = null_mut();
         let error_code: c_int = unsafe { avformat_open_input(ps, url, fmt, options) };
         if error_code != 0 {
-            unsafe { avformat_free_context(format_context) };
             eprintln!("Could not open input: {}", averror_to_string(error_code));
             return Err(error_code);
         }
 
-        let error_code: c_int = unsafe { avformat_find_stream_info(format_context, null_mut()) };
+        let error_code: c_int =
+            unsafe { avformat_find_stream_info(format_context.as_mut(), null_mut()) };
         if error_code != 0 {
-            unsafe { avformat_free_context(format_context) };
             eprintln!(
                 "Could not find stream information: {}",
                 averror_to_string(error_code)
@@ -102,7 +97,7 @@ impl<T: BufRead + Seek> BufferInput<T> {
                 _buffer: buffer,
                 _context: context,
             },
-            unsafe { Input::wrap(format_context) },
+            unsafe { Input::wrap(format_context.into_ptr()) },
         ))
     }
 }
