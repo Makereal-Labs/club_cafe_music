@@ -1,5 +1,6 @@
 mod decoder;
 mod input;
+mod wrappers;
 
 pub use decoder::DecodeSource;
 pub use input::BufferInput;

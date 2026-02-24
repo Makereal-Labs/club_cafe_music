@@ -8,20 +8,23 @@ use ffmpeg_next::{
     error::ENOMEM,
     ffi::{
         AVDictionary, AVERROR, AVERROR_EOF, AVERROR_UNKNOWN, AVFMT_FLAG_CUSTOM_IO, AVFormatContext,
-        AVIOContext, AVInputFormat, AVProbeData, AVSEEK_SIZE, SEEK_CUR, SEEK_END, SEEK_SET,
-        av_free, av_malloc, av_probe_input_format, av_strerror, avformat_alloc_context,
-        avformat_find_stream_info, avformat_free_context, avformat_open_input, avio_alloc_context,
-        avio_context_free,
+        AVInputFormat, AVProbeData, AVSEEK_SIZE, SEEK_CUR, SEEK_END, SEEK_SET,
+        av_probe_input_format, av_strerror, avformat_alloc_context, avformat_find_stream_info,
+        avformat_free_context, avformat_open_input,
     },
     format::context::Input,
 };
 use libc::{c_char, c_int, c_uchar, c_void};
 use log::error;
 
+use crate::ffmpeg::wrappers::{
+    AVBufferOwned, AVIOContextInitParameter, AVIOContextOwned, IoReadFn, IoSeekFn,
+};
+
 pub struct BufferInput<T: BufRead + Seek> {
     _data: Box<DataBuffer<T>>,
-    buffer: *mut c_void,
-    context: *mut AVIOContext,
+    _buffer: AVBufferOwned,
+    _context: AVIOContextOwned,
 }
 
 unsafe impl<T: BufRead + Seek + Send> Send for BufferInput<T> {}
@@ -36,39 +39,22 @@ impl<T: BufRead + Seek> BufferInput<T> {
     pub fn new(data: T) -> Result<(Self, Input), i32> {
         let mut data = Box::new(DataBuffer { data });
         let buffer_size = 4096;
-        let buffer: *mut c_void = unsafe { av_malloc(buffer_size) };
-        if buffer.is_null() {
-            return Err(AVERROR(ENOMEM));
-        }
-        let write_flag: c_int = 0;
-        let opaque: *mut c_void = data.as_mut() as OpaquePointer<T> as *mut c_void;
-        let read_packet = Some(io_read::<T> as IoReadFn);
-        let write_packet = None;
-        let seek = Some(io_seek::<T> as IoSeekFn);
-        // Documentation: https://www.ffmpeg.org/doxygen/8.0/avio_8h.html#a50c588d3c44707784f3afde39e1c181c
-        let mut context: *mut AVIOContext = unsafe {
-            avio_alloc_context(
-                buffer as *mut c_uchar,
-                buffer_size as c_int,
-                write_flag,
-                opaque,
-                read_packet,
-                write_packet,
-                seek,
-            )
-        };
-        if context.is_null() {
-            unsafe { av_free(buffer) };
-            return Err(AVERROR(ENOMEM));
-        }
+        let buffer = AVBufferOwned::new(buffer_size)?;
+        let context = AVIOContextOwned::new(AVIOContextInitParameter {
+            buffer: buffer.as_ptr() as *mut c_uchar,
+            buffer_size: buffer_size as c_int,
+            write_flag: 0,
+            opaque: data.as_mut() as OpaquePointer<T> as *mut c_void,
+            read_packet: Some(io_read::<T> as IoReadFn),
+            write_packet: None,
+            seek: Some(io_seek::<T> as IoSeekFn),
+        })?;
 
         let mut format_context: *mut AVFormatContext = unsafe { avformat_alloc_context() };
         let Some(format_context_ref) = (unsafe { format_context.as_mut() }) else {
-            unsafe { av_free(buffer) };
-            unsafe { avio_context_free(&mut context) };
             return Err(AVERROR(ENOMEM));
         };
-        format_context_ref.pb = context;
+        format_context_ref.pb = context.as_ptr();
         format_context_ref.flags |= AVFMT_FLAG_CUSTOM_IO;
 
         let filename = CString::from(c"");
@@ -95,8 +81,6 @@ impl<T: BufRead + Seek> BufferInput<T> {
         let options: *mut *mut AVDictionary = null_mut();
         let error_code: c_int = unsafe { avformat_open_input(ps, url, fmt, options) };
         if error_code != 0 {
-            unsafe { av_free(buffer) };
-            unsafe { avio_context_free(&mut context) };
             unsafe { avformat_free_context(format_context) };
             eprintln!("Could not open input: {}", averror_to_string(error_code));
             return Err(error_code);
@@ -104,8 +88,6 @@ impl<T: BufRead + Seek> BufferInput<T> {
 
         let error_code: c_int = unsafe { avformat_find_stream_info(format_context, null_mut()) };
         if error_code != 0 {
-            unsafe { av_free(buffer) };
-            unsafe { avio_context_free(&mut context) };
             unsafe { avformat_free_context(format_context) };
             eprintln!(
                 "Could not find stream information: {}",
@@ -117,22 +99,13 @@ impl<T: BufRead + Seek> BufferInput<T> {
         Ok((
             BufferInput {
                 _data: data,
-                buffer,
-                context,
+                _buffer: buffer,
+                _context: context,
             },
             unsafe { Input::wrap(format_context) },
         ))
     }
 }
-
-impl<T: BufRead + Seek> Drop for BufferInput<T> {
-    fn drop(&mut self) {
-        unsafe { av_free(self.buffer) };
-        unsafe { avio_context_free(&mut self.context) };
-    }
-}
-
-type IoReadFn = unsafe extern "C" fn(opaque: *mut c_void, buf: *mut u8, buf_size: c_int) -> c_int;
 
 unsafe extern "C" fn io_read<T: BufRead + Seek>(
     opaque: *mut c_void,
@@ -152,8 +125,6 @@ unsafe extern "C" fn io_read<T: BufRead + Seek>(
 
     if len == 0 { AVERROR_EOF } else { len as c_int }
 }
-
-type IoSeekFn = unsafe extern "C" fn(opaque: *mut c_void, offset: i64, whence: c_int) -> i64;
 
 unsafe extern "C" fn io_seek<T: BufRead + Seek>(
     opaque: *mut c_void,
