@@ -17,7 +17,7 @@ use ffmpeg_next::{
 use libc::{c_char, c_int, c_uchar, c_void};
 use log::error;
 
-use crate::ffmpeg::wrappers::{
+use crate::ffmpeg::wrapper::{
     AVBufferOwned, AVIOContextInitParameter, AVIOContextOwned, IoReadFn, IoSeekFn,
 };
 
