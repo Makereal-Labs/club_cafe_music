@@ -1,5 +1,4 @@
 use std::{
-    ffi::CString,
     io::{BufRead, Seek, SeekFrom},
     ptr::{null, null_mut},
 };
@@ -53,7 +52,6 @@ impl<T: BufRead + Seek> BufferInput<T> {
         format_context.pb = context.as_ptr();
         format_context.flags |= AVFMT_FLAG_CUSTOM_IO;
 
-        let filename = CString::from(c"");
         // take a 256 byte sample for probing
         let mut head_buf = [0u8; 256];
         let head_buf_len = data
@@ -62,7 +60,7 @@ impl<T: BufRead + Seek> BufferInput<T> {
             .expect("Failed to read buffer");
         data.data.rewind().expect("Failed to seek buffer");
         let probe_data = AVProbeData {
-            filename: filename.as_ptr(),
+            filename: c"".as_ptr(),
             buf: head_buf.as_mut_ptr(),
             buf_size: head_buf_len as i32,
             mime_type: null(),
@@ -71,8 +69,7 @@ impl<T: BufRead + Seek> BufferInput<T> {
         format_context.iformat = unsafe { av_probe_input_format(&probe_data, is_opened) };
 
         let ps: *mut *mut AVFormatContext = &mut (format_context.as_mut() as *mut AVFormatContext);
-        let url = CString::from(c"");
-        let url: *const c_char = url.as_ptr();
+        let url: *const c_char = c"".as_ptr();
         let fmt: *const AVInputFormat = null();
         let options: *mut *mut AVDictionary = null_mut();
         let error_code: c_int = unsafe { avformat_open_input(ps, url, fmt, options) };
