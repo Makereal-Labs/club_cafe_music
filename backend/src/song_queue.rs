@@ -42,7 +42,10 @@ pub struct PendingRefetchTask {
     title: String,
 }
 
-pub async fn process_queue(state: &Mutex<AppState<'_>>, handler_event_tx: Sender<HandlerEvent>) {
+pub async fn process_queue(
+    state: &Mutex<AppState<'_>>,
+    handler_event_tx: Sender<HandlerEvent>,
+) -> ! {
     const PERIOD: Duration = Duration::from_millis(100);
     let mut timer = Timer::interval(PERIOD);
     loop {

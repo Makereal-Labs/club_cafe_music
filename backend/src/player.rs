@@ -1,3 +1,4 @@
+use std::convert::Infallible;
 use std::io::BufReader;
 use std::mem::forget;
 use std::time::Duration;
@@ -6,8 +7,8 @@ use log::{error, info};
 use rodio::Sink;
 use smol::{
     Timer,
-    channel::{Receiver, Sender},
-    future::zip,
+    channel::{Receiver, RecvError, Sender},
+    future::FutureExt,
     lock::Mutex,
 };
 use ureq::Agent;
@@ -27,7 +28,7 @@ pub async fn player(
     state: &Mutex<AppState<'_>>,
     player_event_rx: Receiver<PlayerEvent>,
     broadcast_tx: Sender<BroadcastEvent>,
-) {
+) -> Result<Infallible, RecvError> {
     let (stream, stream_handle) = rodio::OutputStream::try_default().unwrap();
     forget(stream);
     let sink = Sink::try_new(&stream_handle).unwrap();
@@ -44,7 +45,11 @@ pub async fn player(
     }
 
     let task1 = async {
-        while let Ok(event) = player_event_rx.recv().await {
+        loop {
+            let event = match player_event_rx.recv().await {
+                Ok(event) => event,
+                Err(err) => return Err(err),
+            };
             match event {
                 PlayerEvent::Pause => {
                     sink.pause();
@@ -139,5 +144,5 @@ pub async fn player(
         }
     };
 
-    zip(task1, task2).await;
+    task1.or(task2).await
 }
