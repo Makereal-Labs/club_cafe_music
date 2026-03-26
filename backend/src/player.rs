@@ -1,26 +1,23 @@
 use std::convert::Infallible;
-use std::io::BufReader;
-use std::mem::forget;
 use std::time::Duration;
 
 use log::{error, info};
-use rodio::Sink;
 use smol::{
     Timer,
     channel::{Receiver, RecvError, Sender},
     future::FutureExt,
     lock::Mutex,
 };
-use ureq::Agent;
+use vlc::MediaPlayerAudioEx as _;
 
-use crate::ffmpeg::{BufferInput, DecodeSource, averror_to_string};
-use crate::{AppState, BroadcastEvent, PlayerEvent, http_stream::HttpStream};
+use crate::{AppState, BroadcastEvent, PlayerEvent};
 
-fn adjust_volume(volume: f32) -> f32 {
+// expected input range: 0.0 ~ 1.0
+fn adjust_volume(volume: f32) -> i32 {
     if volume < 0.005 {
-        0.0
+        0
     } else {
-        ((volume - 1.0) * 6.0).exp()
+        (((volume - 1.0) * 6.0).exp() * 100.) as i32
     }
 }
 
@@ -29,19 +26,16 @@ pub async fn player(
     player_event_rx: Receiver<PlayerEvent>,
     broadcast_tx: Sender<BroadcastEvent>,
 ) -> Result<Infallible, RecvError> {
-    let (stream, stream_handle) = rodio::OutputStream::try_default().unwrap();
-    forget(stream);
-    let sink = Sink::try_new(&stream_handle).unwrap();
-    let agent: Agent = Agent::config_builder().build().into();
+    let vlc_instance = vlc::Instance::new().expect("Failed to create VLC instance");
+    let player = vlc::MediaPlayer::new(&vlc_instance).expect("Failed to create VLC MediaPlayer");
 
     {
         let state = state.lock().await;
-        if state.player.playing {
-            sink.play();
-        } else {
-            sink.pause();
+        player.set_pause(!state.player.playing);
+        let volume = adjust_volume(state.player.volume);
+        if player.set_volume(volume).is_err() {
+            error!("Failed to set volume: {}", volume);
         }
-        sink.set_volume(adjust_volume(state.player.volume));
     }
 
     let task1 = async {
@@ -52,17 +46,20 @@ pub async fn player(
             };
             match event {
                 PlayerEvent::Pause => {
-                    sink.pause();
+                    player.set_pause(true);
                 }
                 PlayerEvent::Resume => {
-                    sink.play();
+                    player.set_pause(false);
                 }
                 PlayerEvent::Skip => {
-                    sink.skip_one();
+                    player.stop();
                 }
                 PlayerEvent::SetVolume => {
                     let volume = state.lock().await.player.volume;
-                    sink.set_volume(adjust_volume(volume.clamp(0.0, 1.0)));
+                    let volume = adjust_volume(volume.clamp(0.0, 1.0));
+                    if player.set_volume(volume).is_err() {
+                        error!("Failed to set volume: {}", volume);
+                    }
                 }
             }
         }
@@ -110,32 +107,19 @@ pub async fn player(
                     }
                 };
 
-                let http_stream = match HttpStream::new(agent.clone(), &format.url) {
-                    Ok(http_stream) => http_stream,
-                    Err(err) => {
-                        error!("Fetch url failed: {}", err);
-                        continue;
-                    }
+                let Some(media) = vlc::Media::new_location(&vlc_instance, &format.url) else {
+                    error!("Failed to create new vlc Media");
+                    continue;
                 };
 
-                let (buf_input, input) = match BufferInput::new(BufReader::new(http_stream)) {
-                    Ok(v) => v,
-                    Err(error) => {
-                        error!("FFMPEG Error: {}", averror_to_string(error));
-                        continue;
-                    }
-                };
+                player.set_media(&media);
+                player.set_time(0);
+                if player.play().is_err() {
+                    error!("Failed to start playing");
+                }
+                Timer::after(Duration::from_millis(100)).await;
 
-                let source = match DecodeSource::new(input, Some(buf_input)) {
-                    Ok(source) => source,
-                    Err(err) => {
-                        error!("Audio decode failed: {}", err);
-                        continue;
-                    }
-                };
-
-                sink.append(source);
-                while !sink.empty() {
+                while player.is_playing() {
                     Timer::after(Duration::from_millis(100)).await;
                 }
                 info!("Finished playing song");
