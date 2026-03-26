@@ -7,6 +7,7 @@ How to write a good changelog: [zh-TW](https://keepachangelog.com/zh-TW/1.1.0/),
 ### Fixed
 
 - Removed 2 todo that I forgot to do
+- Replaced `FFMPEG` with `vlc-rs` because I can't do `unsafe`
 
 ## v0.2.1
 
