@@ -2,7 +2,11 @@
 
 How to write a good changelog: [zh-TW](https://keepachangelog.com/zh-TW/1.1.0/), [en](https://keepachangelog.com/en/1.1.0/)
 
-## Unreleased
+## v0.3.1
+
+### Changed
+
+- Remove Logarithmic Volume Control because `vlc-rs` seems to do this internally
 
 ## v0.3.0
 

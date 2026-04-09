@@ -14,11 +14,7 @@ use crate::{AppState, BroadcastEvent, PlayerEvent};
 
 // expected input range: 0.0 ~ 1.0
 fn adjust_volume(volume: f32) -> i32 {
-    if volume < 0.005 {
-        0
-    } else {
-        (((volume - 1.0) * 6.0).exp() * 100.) as i32
-    }
+    (volume * 100.) as i32
 }
 
 pub async fn player(
