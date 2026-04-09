@@ -88,8 +88,6 @@ pub async fn player(
             queue_was_not_empty = info.is_some();
 
             if let Some(info) = info {
-                info!("Start playing song (id: {})", info.id);
-
                 let format = info
                     .formats
                     .iter()
@@ -117,11 +115,24 @@ pub async fn player(
                 if player.play().is_err() {
                     error!("Failed to start playing");
                 }
-                Timer::after(Duration::from_millis(100)).await;
 
-                while player.is_playing() {
-                    Timer::after(Duration::from_millis(100)).await;
+                info!("Start playing song (id: {})", info.id);
+
+                loop {
+                    match player.state() {
+                        vlc::State::Ended | vlc::State::Stopped => {
+                            break;
+                        }
+                        vlc::State::Error => {
+                            error!("MediaPlayer ended with an error");
+                            break;
+                        }
+                        _ => {
+                            Timer::after(Duration::from_millis(100)).await;
+                        }
+                    }
                 }
+
                 info!("Finished playing song");
             }
             Timer::after(Duration::from_millis(200)).await;
