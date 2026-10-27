@@ -15,11 +15,7 @@ import {
   useTheme,
 } from "@mui/material";
 import { useState } from "react";
-
-function format_time(time: number): string {
-  return `${Math.floor(time / 60)}:`
-    + `${Math.floor(time) % 60}`.padStart(2, "0");
-}
+import { format_time } from "./time_fmt";
 
 type PlayerProps = {
   playing: boolean,

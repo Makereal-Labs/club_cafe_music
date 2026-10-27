@@ -21,6 +21,7 @@ import { get_theme, ThemeId } from './theme.ts';
 import { Link } from '@mui/icons-material';
 import CustomSnackbar from './CustomSnackbar.tsx';
 import ChangelogView from './ChangelogView.tsx';
+import { format_time } from './time_fmt.ts';
 
 type ListEntry = {
   fetched: boolean,
@@ -148,18 +149,7 @@ function App() {
   }
 
   function gen_queue_entry(item: ListEntry) {
-    let time = null;
-    if (item.time) {
-      const second = Math.floor(item.time % 60).toString().padStart(2, "0");
-      const minute = Math.floor(item.time / 60);
-      if (minute >= 60) {
-        const minute2 = Math.floor(minute % 60).toString().padStart(2, "0");
-        const hour = Math.floor(minute / 60);
-        time = `${hour}:${minute2}:${second}`;
-      } else {
-        time = `${minute}:${second}`;
-      }
-    }
+    const time = format_time(item.time);
 
     return <>
       <ListItem
@@ -181,6 +171,10 @@ function App() {
       <Divider />
     </>;
   }
+
+  const queue_time_total = recv.map(e => e.time ?? 0)
+    .reduce((a, b) => a + b, 0);
+  const queue_time_str = format_time(queue_time_total);
 
   return (
     <ThemeProvider theme={get_theme(theme)}>
@@ -220,7 +214,7 @@ function App() {
           <List>
             <ListSubheader>Now Playing</ListSubheader>
             {now_playing ? gen_queue_entry(now_playing) : null}
-            <ListSubheader>Queue</ListSubheader>
+            <ListSubheader>Queue ({queue_time_str})</ListSubheader>
             {recv.map(gen_queue_entry)}
           </List>
         </Container>
