@@ -4,7 +4,6 @@ mod song_queue;
 mod yt_dlp;
 
 use simplelog::{ColorChoice, ConfigBuilder, TermLogger, TerminalMode};
-use smol::prelude::*;
 use smol::{
     Executor, block_on,
     channel::{self, RecvError},
@@ -99,10 +98,9 @@ fn main() {
     let task1 = player(&state, player_event_rx, broadcast_tx.clone());
     let task2 = process_queue(&state, handler_event_tx.clone());
     let task3 = async {
-        let mut incoming = server.incoming();
         loop {
-            match incoming.next().await {
-                Some(Ok(stream)) => {
+            match server.accept().await {
+                Ok((stream, _addr)) => {
                     let (tx, rx) = channel::unbounded();
                     let _ = tx.send(BroadcastEvent::UpdatePlayer).await;
                     let _ = tx.send(BroadcastEvent::UpdateQueue).await;
@@ -116,12 +114,9 @@ fn main() {
                     })
                     .detach();
                 }
-                Some(Err(error)) => {
+                Err(error) => {
                     error!("Error listening socket: {error}");
-                    break Err(error);
-                }
-                None => {
-                    break Ok(());
+                    break Result::<!, _>::Err(error);
                 }
             }
         }
