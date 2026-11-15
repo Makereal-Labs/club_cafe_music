@@ -11,10 +11,12 @@ use crate::{
     yt_dlp::{YoutubeInfo, YtdlpResult, get_ytdlp},
 };
 
+pub type QueueEntryId = u16;
+
 #[derive(Debug, Default)]
 pub struct SongQueue<'ex> {
-    id_counter: u16,
-    queue: VecDeque<(u16, QueueEntry)>,
+    id_counter: QueueEntryId,
+    queue: VecDeque<(QueueEntryId, QueueEntry)>,
     executor: Executor<'ex>,
 }
 
@@ -159,7 +161,7 @@ pub async fn process_queue(
 }
 
 impl<'ex> SongQueue<'ex> {
-    fn new_id(&mut self) -> u16 {
+    fn new_id(&mut self) -> QueueEntryId {
         let id = self.id_counter;
         self.id_counter += 1;
         id
@@ -176,7 +178,7 @@ impl<'ex> SongQueue<'ex> {
         self.queue.push_back((id, QueueEntry::Fetching(task)));
     }
 
-    pub async fn try_pop(&mut self) -> Option<Option<(u16, YoutubeInfo)>> {
+    pub async fn try_pop(&mut self) -> Option<Option<(QueueEntryId, YoutubeInfo)>> {
         let Some((id, first)) = self.queue.pop_front() else {
             return Some(None);
         };
@@ -198,11 +200,11 @@ impl<'ex> SongQueue<'ex> {
         }
     }
 
-    pub fn try_delete(&mut self, id: u16) {
+    pub fn try_delete(&mut self, id: QueueEntryId) {
         self.queue.retain(|(i, _)| *i != id);
     }
 
-    pub fn iter(&self) -> impl Iterator<Item = (u16, &QueueEntry)> {
+    pub fn iter(&self) -> impl Iterator<Item = (QueueEntryId, &QueueEntry)> {
         self.queue.iter().map(|(a, b)| (*a, b))
     }
 }

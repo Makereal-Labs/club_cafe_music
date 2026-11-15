@@ -5,7 +5,7 @@ use log::{info, warn};
 use serde_json::json;
 use smol::{channel::Receiver, channel::Sender, future::try_zip, lock::Mutex, net::TcpStream};
 
-use crate::song_queue::QueueEntry;
+use crate::song_queue::{QueueEntry, QueueEntryId};
 use crate::yt_dlp::{YoutubeInfo, get_ytdlp};
 use crate::{AppState, BroadcastEvent, HandlerEvent};
 
@@ -35,11 +35,11 @@ pub async fn handle(
             let msg = match broadcast_event {
                 BroadcastEvent::UpdateQueue => {
                     let state = state.lock().await;
-                    let info_to_json = |id: u16, info: &YoutubeInfo| {
+                    let info_to_json = |id: QueueEntryId, info: &YoutubeInfo| {
                         let url = format!("https://www.youtube.com/watch?v={}", info.id);
                         json!({"fetched": true, "id": id, "title": info.title, "url": url, "time": info.duration})
                     };
-                    let entry_to_json = |(id, entry): (u16, &QueueEntry)| match entry {
+                    let entry_to_json = |(id, entry): (QueueEntryId, &QueueEntry)| match entry {
                         QueueEntry::Fetched(info) => info_to_json(id, info),
                         QueueEntry::Fetching(task) => {
                             json!({"fetched": false, "id": id, "url": task.url()})
@@ -163,7 +163,7 @@ pub async fn handle(
                 "delete" => match obj.get("id") {
                     Some(Number(id)) => {
                         if let Some(id) = id.as_u64() {
-                            let id = id as u16;
+                            let id = id as QueueEntryId;
                             let is_now_playing = match &state.lock().await.now_playing {
                                 Some((i, _)) => *i == id,
                                 None => false,

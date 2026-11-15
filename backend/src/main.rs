@@ -23,9 +23,11 @@ use player::player;
 use song_queue::{SongQueue, process_queue};
 use yt_dlp::YoutubeInfo;
 
+use crate::song_queue::QueueEntryId;
+
 #[derive(Debug, Default)]
 struct AppState<'ex> {
-    now_playing: Option<(u16, YoutubeInfo)>,
+    now_playing: Option<(QueueEntryId, YoutubeInfo)>,
     queue: SongQueue<'ex>,
     player: PlayerState,
 }
