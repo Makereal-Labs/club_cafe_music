@@ -163,7 +163,7 @@ pub async fn process_queue(
 impl<'ex> SongQueue<'ex> {
     fn new_id(&mut self) -> QueueEntryId {
         let id = self.id_counter;
-        self.id_counter += 1;
+        self.id_counter = self.id_counter.wrapping_add(1);
         id
     }
 
