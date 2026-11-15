@@ -3,8 +3,6 @@ mod player;
 mod song_queue;
 mod yt_dlp;
 
-use std::convert::Infallible;
-
 use simplelog::{ColorChoice, ConfigBuilder, TermLogger, TerminalMode};
 use smol::prelude::*;
 use smol::{
@@ -133,7 +131,7 @@ fn main() {
             let event = match broadcast_rx.recv().await {
                 Ok(event) => event,
                 Err(err) => {
-                    break Result::<Infallible, RecvError>::Err(err);
+                    break Result::<!, RecvError>::Err(err);
                 }
             };
             for listener in event_listeners.lock().await.iter() {
@@ -146,7 +144,7 @@ fn main() {
             let event = match handler_event_rx.recv().await {
                 Ok(event) => event,
                 Err(err) => {
-                    break Result::<Infallible, RecvError>::Err(err);
+                    break Result::<!, RecvError>::Err(err);
                 }
             };
             match event {

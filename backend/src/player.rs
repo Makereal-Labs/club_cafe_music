@@ -1,4 +1,3 @@
-use std::convert::Infallible;
 use std::time::Duration;
 
 use log::{error, info};
@@ -21,7 +20,7 @@ pub async fn player(
     state: &Mutex<AppState<'_>>,
     player_event_rx: Receiver<PlayerEvent>,
     broadcast_tx: Sender<BroadcastEvent>,
-) -> Result<Infallible, RecvError> {
+) -> Result<!, RecvError> {
     let vlc_instance = vlc::Instance::new().expect("Failed to create VLC instance");
     let player = vlc::MediaPlayer::new(&vlc_instance).expect("Failed to create VLC MediaPlayer");
 
