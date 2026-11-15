@@ -25,7 +25,7 @@ use yt_dlp::YoutubeInfo;
 
 #[derive(Debug, Default)]
 struct AppState<'ex> {
-    now_playing: Option<YoutubeInfo>,
+    now_playing: Option<(u16, YoutubeInfo)>,
     queue: SongQueue<'ex>,
     player: PlayerState,
 }

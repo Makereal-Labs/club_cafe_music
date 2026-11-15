@@ -35,23 +35,26 @@ pub async fn handle(
             let msg = match broadcast_event {
                 BroadcastEvent::UpdateQueue => {
                     let state = state.lock().await;
-                    let info_to_json = |info: &YoutubeInfo| {
+                    let info_to_json = |id: u16, info: &YoutubeInfo| {
                         let url = format!("https://www.youtube.com/watch?v={}", info.id);
-                        json!({"fetched": true, "title": info.title, "url": url, "time": info.duration})
+                        json!({"fetched": true, "id": id, "title": info.title, "url": url, "time": info.duration})
                     };
-                    let entry_to_json = |entry: &QueueEntry| match entry {
-                        QueueEntry::Fetched(info) => info_to_json(info),
+                    let entry_to_json = |(id, entry): (u16, &QueueEntry)| match entry {
+                        QueueEntry::Fetched(info) => info_to_json(id, info),
                         QueueEntry::Fetching(task) => {
-                            json!({"fetched": false, "url": task.url()})
+                            json!({"fetched": false, "id": id, "url": task.url()})
                         }
                         QueueEntry::Refetching(task) => {
-                            json!({"fetched": false, "url": task.url(), "title": task.title()})
+                            json!({"fetched": false, "id": id, "url": task.url(), "title": task.title()})
                         }
                         QueueEntry::PendingRefetch(task) => {
-                            json!({"fetched": false, "url": task.url(), "title": task.title()})
+                            json!({"fetched": false, "id": id, "url": task.url(), "title": task.title()})
                         }
                     };
-                    let now_playing = state.now_playing.as_ref().map(info_to_json);
+                    let now_playing = state
+                        .now_playing
+                        .as_ref()
+                        .map(|(id, info)| info_to_json(*id, info));
                     let queue = state.queue.iter().map(entry_to_json).collect::<Vec<_>>();
                     json!({
                         "msg": "queue",
@@ -155,6 +158,33 @@ pub async fn handle(
                     }
                     None => {
                         warn!("Malformed client message: msg = volume, volume not found");
+                    }
+                },
+                "delete" => match obj.get("id") {
+                    Some(Number(id)) => {
+                        if let Some(id) = id.as_u64() {
+                            let id = id as u16;
+                            let is_now_playing = match &state.lock().await.now_playing {
+                                Some((i, _)) => *i == id,
+                                None => false,
+                            };
+                            if is_now_playing {
+                                let _ = handler_event_tx.send(HandlerEvent::Skip).await;
+                            } else {
+                                state.lock().await.queue.try_delete(id);
+                                let _ = handler_event_tx.send(HandlerEvent::UpdateQueue).await;
+                            }
+                        } else {
+                            warn!(
+                                "Malformed client message: msg = delete, value is not integer ({id})"
+                            );
+                        }
+                    }
+                    Some(_) => {
+                        warn!("Malformed client message: msg = delete, value is not number");
+                    }
+                    None => {
+                        warn!("Malformed client message: msg = delete, id not found");
                     }
                 },
                 _ => {

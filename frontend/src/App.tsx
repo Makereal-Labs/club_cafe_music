@@ -18,13 +18,14 @@ import { useSession } from './session.ts';
 import Player from './Player.tsx';
 import ThemeToggle from './ThemeToggle.tsx';
 import { get_theme, ThemeId } from './theme.ts';
-import { Link } from '@mui/icons-material';
+import { Delete, Link } from '@mui/icons-material';
 import CustomSnackbar from './CustomSnackbar.tsx';
 import ChangelogView from './ChangelogView.tsx';
 import { format_time } from './time_fmt.ts';
 
 type ListEntry = {
   fetched: boolean,
+  id: number,
   title: string,
   url: string,
   time: number,
@@ -154,13 +155,30 @@ function App() {
     return <>
       <ListItem
         secondaryAction={
-          <IconButton edge="end" aria-label="copy link"
-            onClick={() => {
-              copyToClipboard(item.url);
-              display_snackbar("Link copied!");
-            }}>
-            <Link />
-          </IconButton>
+          <>
+            <IconButton edge="end" aria-label="copy link"
+              onClick={() => {
+                copyToClipboard(item.url);
+                display_snackbar("Link copied!");
+              }}>
+              <Link />
+            </IconButton>
+            <IconButton edge="end" aria-label="delete"
+              onClick={() => {
+                if (item.fetched) {
+                  display_snackbar("Deleted: " + item.title);
+                } else {
+                  display_snackbar("Deleted entry!");
+                }
+                const msg = {
+                  msg: "delete",
+                  id: item.id,
+                };
+                session.send(JSON.stringify(msg));
+              }}>
+              <Delete />
+            </IconButton>
+          </>
         }
       >
         <ListItemText

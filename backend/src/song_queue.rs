@@ -1,4 +1,6 @@
-use std::{collections::VecDeque, mem::take, time::Duration};
+use std::collections::VecDeque;
+use std::mem::take;
+use std::time::Duration;
 
 use futures::StreamExt;
 use log::error;
@@ -11,7 +13,8 @@ use crate::{
 
 #[derive(Debug, Default)]
 pub struct SongQueue<'ex> {
-    queue: VecDeque<QueueEntry>,
+    id_counter: u16,
+    queue: VecDeque<(u16, QueueEntry)>,
     executor: Executor<'ex>,
 }
 
@@ -48,6 +51,16 @@ pub async fn process_queue(
 ) -> ! {
     const PERIOD: Duration = Duration::from_millis(100);
     let mut timer = Timer::interval(PERIOD);
+
+    let queue_push = |id, state: &mut AppState, entry| {
+        state.queue.queue.push_back((id, entry));
+    };
+
+    let queue_push_new = |state: &mut AppState, entry| {
+        let id = state.queue.new_id();
+        queue_push(id, state, entry);
+    };
+
     loop {
         let mut queue_changed = false;
         {
@@ -55,17 +68,17 @@ pub async fn process_queue(
             if state.queue.executor.try_tick() {
                 let old_queue = take(&mut state.queue.queue);
                 let mut fetching_counter = 0;
-                for entry in old_queue {
+                for (id, entry) in old_queue {
                     match entry {
                         QueueEntry::Fetched(info) => {
-                            state.queue.queue.push_back(QueueEntry::Fetched(info));
+                            queue_push(id, &mut state, QueueEntry::Fetched(info));
                         }
                         QueueEntry::Fetching(task) => {
                             if task.task.is_finished() {
                                 queue_changed = true;
                                 match task.task.await {
                                     Ok(YtdlpResult::Single(info)) => {
-                                        state.queue.queue.push_back(QueueEntry::Fetched(info));
+                                        queue_push(id, &mut state, QueueEntry::Fetched(info));
                                     }
                                     Ok(YtdlpResult::Playlist(list)) => {
                                         for info in list {
@@ -78,17 +91,17 @@ pub async fn process_queue(
                                                 let future = get_ytdlp(url.clone());
                                                 let task = state.queue.executor.spawn(future);
                                                 let task = RefetchTask { url, title, task };
-                                                state
-                                                    .queue
-                                                    .queue
-                                                    .push_back(QueueEntry::Refetching(task));
+                                                queue_push_new(
+                                                    &mut state,
+                                                    QueueEntry::Refetching(task),
+                                                );
                                                 fetching_counter += 1;
                                             } else {
                                                 let task = PendingRefetchTask { url, title };
-                                                state
-                                                    .queue
-                                                    .queue
-                                                    .push_back(QueueEntry::PendingRefetch(task));
+                                                queue_push_new(
+                                                    &mut state,
+                                                    QueueEntry::PendingRefetch(task),
+                                                );
                                             }
                                         }
                                     }
@@ -97,7 +110,7 @@ pub async fn process_queue(
                                     }
                                 };
                             } else {
-                                state.queue.queue.push_back(QueueEntry::Fetching(task));
+                                queue_push(id, &mut state, QueueEntry::Fetching(task));
                                 fetching_counter += 1;
                             }
                         }
@@ -106,7 +119,7 @@ pub async fn process_queue(
                                 queue_changed = true;
                                 match task.task.await {
                                     Ok(YtdlpResult::Single(info)) => {
-                                        state.queue.queue.push_back(QueueEntry::Fetched(info));
+                                        queue_push(id, &mut state, QueueEntry::Fetched(info));
                                     }
                                     Err(error) => {
                                         error!("yt-dlp Failed: {error}");
@@ -116,7 +129,7 @@ pub async fn process_queue(
                                     }
                                 };
                             } else {
-                                state.queue.queue.push_back(QueueEntry::Refetching(task));
+                                queue_push(id, &mut state, QueueEntry::Refetching(task));
                                 fetching_counter += 1;
                             }
                         }
@@ -128,13 +141,10 @@ pub async fn process_queue(
                                     title: task.title,
                                     task: state.queue.executor.spawn(future),
                                 };
-                                state.queue.queue.push_back(QueueEntry::Refetching(task));
+                                queue_push(id, &mut state, QueueEntry::Refetching(task));
                                 fetching_counter += 1;
                             } else {
-                                state
-                                    .queue
-                                    .queue
-                                    .push_back(QueueEntry::PendingRefetch(task));
+                                queue_push(id, &mut state, QueueEntry::PendingRefetch(task));
                             }
                         }
                     }
@@ -149,6 +159,12 @@ pub async fn process_queue(
 }
 
 impl<'ex> SongQueue<'ex> {
+    fn new_id(&mut self) -> u16 {
+        let id = self.id_counter;
+        self.id_counter += 1;
+        id
+    }
+
     pub fn push_task(
         &mut self,
         future: impl Future<Output = anyhow::Result<YtdlpResult>> + Send + 'ex,
@@ -156,32 +172,38 @@ impl<'ex> SongQueue<'ex> {
     ) {
         let task = self.executor.spawn(future);
         let task = FetchTask { task, url };
-        self.queue.push_back(QueueEntry::Fetching(task));
+        let id = self.new_id();
+        self.queue.push_back((id, QueueEntry::Fetching(task)));
     }
 
-    pub async fn try_pop(&mut self) -> Option<Option<YoutubeInfo>> {
-        let Some(first) = self.queue.pop_front() else {
+    pub async fn try_pop(&mut self) -> Option<Option<(u16, YoutubeInfo)>> {
+        let Some((id, first)) = self.queue.pop_front() else {
             return Some(None);
         };
         match first {
-            QueueEntry::Fetched(info) => Some(Some(info)),
+            QueueEntry::Fetched(info) => Some(Some((id, info))),
             QueueEntry::Fetching(task) => {
-                self.queue.push_front(QueueEntry::Fetching(task));
+                self.queue.push_front((id, QueueEntry::Fetching(task)));
                 None
             }
             QueueEntry::Refetching(task) => {
-                self.queue.push_front(QueueEntry::Refetching(task));
+                self.queue.push_front((id, QueueEntry::Refetching(task)));
                 None
             }
             QueueEntry::PendingRefetch(task) => {
-                self.queue.push_front(QueueEntry::PendingRefetch(task));
+                self.queue
+                    .push_front((id, QueueEntry::PendingRefetch(task)));
                 None
             }
         }
     }
 
-    pub fn iter(&self) -> impl Iterator<Item = &QueueEntry> {
-        self.queue.iter()
+    pub fn try_delete(&mut self, id: u16) {
+        self.queue.retain(|(i, _)| *i != id);
+    }
+
+    pub fn iter(&self) -> impl Iterator<Item = (u16, &QueueEntry)> {
+        self.queue.iter().map(|(a, b)| (*a, b))
     }
 }
 

@@ -83,7 +83,7 @@ pub async fn player(
 
             queue_was_not_empty = info.is_some();
 
-            if let Some(info) = info {
+            if let Some((_id, info)) = info {
                 let format = info
                     .formats
                     .iter()
