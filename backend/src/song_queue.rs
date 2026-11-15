@@ -6,10 +6,12 @@ use futures::StreamExt;
 use log::error;
 use smol::{Executor, Task, Timer, channel::Sender, lock::Mutex};
 
-use crate::{
-    AppState, HandlerEvent,
-    yt_dlp::{YoutubeInfo, YtdlpResult, get_ytdlp},
-};
+use crate::AppState;
+use crate::HandlerEvent;
+use crate::yt_dlp::{YoutubeInfo, YtdlpResult, get_ytdlp};
+
+const PROCESS_PERIOD: Duration = Duration::from_millis(100);
+const MAX_FETCH_COUNT: u8 = 5;
 
 pub type QueueEntryId = u16;
 
@@ -51,112 +53,112 @@ pub async fn process_queue(
     state: &Mutex<AppState<'_>>,
     handler_event_tx: Sender<HandlerEvent>,
 ) -> ! {
-    const PERIOD: Duration = Duration::from_millis(100);
-    let mut timer = Timer::interval(PERIOD);
-
-    let queue_push = |id, state: &mut AppState, entry| {
-        state.queue.queue.push_back((id, entry));
-    };
-
-    let queue_push_new = |state: &mut AppState, entry| {
-        let id = state.queue.new_id();
-        queue_push(id, state, entry);
-    };
+    let mut timer = Timer::interval(PROCESS_PERIOD);
 
     loop {
-        let mut queue_changed = false;
-        {
+        let queue_changed = {
             let mut state = state.lock().await;
             if state.queue.executor.try_tick() {
-                let old_queue = take(&mut state.queue.queue);
-                let mut fetching_counter = 0;
-                for (id, entry) in old_queue {
-                    match entry {
-                        QueueEntry::Fetched(info) => {
-                            queue_push(id, &mut state, QueueEntry::Fetched(info));
-                        }
-                        QueueEntry::Fetching(task) => {
-                            if task.task.is_finished() {
-                                queue_changed = true;
-                                match task.task.await {
-                                    Ok(YtdlpResult::Single(info)) => {
-                                        queue_push(id, &mut state, QueueEntry::Fetched(info));
-                                    }
-                                    Ok(YtdlpResult::Playlist(list)) => {
-                                        for info in list {
-                                            let url = format!(
-                                                "https://www.youtube.com/watch?v={}",
-                                                info.id
-                                            );
-                                            let title = info.title;
-                                            if fetching_counter < 5 {
-                                                let future = get_ytdlp(url.clone());
-                                                let task = state.queue.executor.spawn(future);
-                                                let task = RefetchTask { url, title, task };
-                                                queue_push_new(
-                                                    &mut state,
-                                                    QueueEntry::Refetching(task),
-                                                );
-                                                fetching_counter += 1;
-                                            } else {
-                                                let task = PendingRefetchTask { url, title };
-                                                queue_push_new(
-                                                    &mut state,
-                                                    QueueEntry::PendingRefetch(task),
-                                                );
-                                            }
-                                        }
-                                    }
-                                    Err(error) => {
-                                        error!("yt-dlp Failed: {error}");
-                                    }
-                                };
-                            } else {
-                                queue_push(id, &mut state, QueueEntry::Fetching(task));
-                                fetching_counter += 1;
-                            }
-                        }
-                        QueueEntry::Refetching(task) => {
-                            if task.task.is_finished() {
-                                queue_changed = true;
-                                match task.task.await {
-                                    Ok(YtdlpResult::Single(info)) => {
-                                        queue_push(id, &mut state, QueueEntry::Fetched(info));
-                                    }
-                                    Err(error) => {
-                                        error!("yt-dlp Failed: {error}");
-                                    }
-                                    Ok(YtdlpResult::Playlist(_)) => {
-                                        unreachable!();
-                                    }
-                                };
-                            } else {
-                                queue_push(id, &mut state, QueueEntry::Refetching(task));
-                                fetching_counter += 1;
-                            }
-                        }
-                        QueueEntry::PendingRefetch(task) => {
-                            if fetching_counter < 5 {
-                                let future = get_ytdlp(task.url.clone());
-                                let task = RefetchTask {
-                                    url: task.url,
-                                    title: task.title,
-                                    task: state.queue.executor.spawn(future),
-                                };
-                                queue_push(id, &mut state, QueueEntry::Refetching(task));
-                                fetching_counter += 1;
-                            } else {
-                                queue_push(id, &mut state, QueueEntry::PendingRefetch(task));
-                            }
-                        }
-                    }
-                }
+                tick_queue(&mut state.queue).await
+            } else {
+                false
             }
-        }
+        };
         if queue_changed {
             let _ = handler_event_tx.send(HandlerEvent::UpdateQueue).await;
         }
         timer.next().await;
+    }
+}
+
+async fn tick_queue(queue: &mut SongQueue<'_>) -> bool {
+    let mut queue_changed = false;
+    let mut fetching_counter = 0;
+    let old_queue = take(&mut queue.queue);
+
+    for (id, entry) in old_queue {
+        match entry {
+            QueueEntry::Fetched(info) => {
+                let entry = QueueEntry::Fetched(info);
+                queue.queue.push_back((id, entry));
+            }
+            QueueEntry::Fetching(task) => {
+                if task.task.is_finished() {
+                    queue_changed = true;
+                    let task_result = task.task.await;
+                    process_task_result(task_result, id, queue, &mut fetching_counter);
+                } else {
+                    let entry = QueueEntry::Fetching(task);
+                    queue.queue.push_back((id, entry));
+                    fetching_counter += 1;
+                }
+            }
+            QueueEntry::Refetching(task) => {
+                if task.task.is_finished() {
+                    queue_changed = true;
+                    let task_result = task.task.await;
+                    process_task_result(task_result, id, queue, &mut fetching_counter);
+                } else {
+                    let entry = QueueEntry::Refetching(task);
+                    queue.queue.push_back((id, entry));
+                    fetching_counter += 1;
+                }
+            }
+            QueueEntry::PendingRefetch(task) => {
+                if fetching_counter < MAX_FETCH_COUNT {
+                    let future = get_ytdlp(task.url.clone());
+                    let task = RefetchTask {
+                        url: task.url,
+                        title: task.title,
+                        task: queue.executor.spawn(future),
+                    };
+                    let entry = QueueEntry::Refetching(task);
+                    queue.queue.push_back((id, entry));
+                    fetching_counter += 1;
+                } else {
+                    let entry = QueueEntry::PendingRefetch(task);
+                    queue.queue.push_back((id, entry));
+                }
+            }
+        }
+    }
+    queue_changed
+}
+
+fn process_task_result(
+    task_result: Result<YtdlpResult, anyhow::Error>,
+    id: u16,
+    queue: &mut SongQueue<'_>,
+    fetching_counter: &mut u8,
+) {
+    match task_result {
+        Ok(YtdlpResult::Single(info)) => {
+            let entry = QueueEntry::Fetched(info);
+            queue.queue.push_back((id, entry));
+        }
+        Ok(YtdlpResult::Playlist(list)) => {
+            for info in list {
+                let url = format!("https://www.youtube.com/watch?v={}", info.id);
+                let title = info.title;
+                if *fetching_counter < MAX_FETCH_COUNT {
+                    let future = get_ytdlp(url.clone());
+                    let task = queue.executor.spawn(future);
+                    let task = RefetchTask { url, title, task };
+                    let id = queue.new_id();
+                    let entry = QueueEntry::Refetching(task);
+                    queue.queue.push_back((id, entry));
+                    *fetching_counter += 1;
+                } else {
+                    let task = PendingRefetchTask { url, title };
+                    let id = queue.new_id();
+                    let entry = QueueEntry::PendingRefetch(task);
+                    queue.queue.push_back((id, entry));
+                }
+            }
+        }
+        Err(error) => {
+            error!("yt-dlp Failed: {error}");
+        }
     }
 }
 
